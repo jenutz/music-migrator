@@ -1,0 +1,210 @@
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Split Song Layout</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f5f5f5;
+    }
+
+    .container {
+      display: flex;
+      height: 100vh;
+    }
+
+    .left, .right {
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .left {
+      flex: 1;
+      background-color: #eeeeee;
+      border-right: 2px solid #ddd;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      padding-top: 40px;
+    }
+
+    .right {
+      flex: 1.5;
+      background-color: #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      padding-top: 40px;
+    }
+
+    .left .song-card {
+      height: 200px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .right .song-card {
+      height: 120px;
+      padding: 20px;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .song-card {
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    /* Left card layout */
+    .left .song-top {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .song-info {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      width: 500px;
+    }
+
+    .song-card h2 {
+      margin: 0 0 10px 0;
+      font-size: 1.2em;
+    }
+
+    .song-card p {
+      margin: 0;
+      font-size: 0.95em;
+      color: #555;
+    }
+
+    /* Buttons */
+    .song-card button {
+      border: none;
+      background-color: #007fff;
+      color: white;
+      padding: 10px;
+      border-radius: 9999px;
+      cursor: pointer;
+      font-size: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.2s;
+      flex-shrink: 0;
+    }
+
+    .song-card button:hover {
+      background-color: #aa7fff;
+    }
+
+    /* Left card buttons container */
+    .left .buttons-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    /* Song images */
+    .song-image {
+      width: 100px;
+      height: 100px;
+      border-radius: 10px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+
+    /* Match score now aligned right next to info */
+    .match-score {
+      font-weight: bold;
+      color: #333;
+      font-size: 1em;
+      white-space: nowrap;
+      margin-left: 50px; /* adjust as needed */
+    }
+
+    /* Right card content wrapper for text + match */
+    .song-right-info {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .song-right-text {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .material-icons {
+      font-size: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Left Side -->
+    <div class="left">
+      <div class="song-card">
+        <div class="song-top">
+          <img src="{{target.thumbnail}}" alt="Targets Album Art" class="song-image">
+          <div class="song-info">
+              <h2>{{target.title}}</h2>
+              <p>{{target.artists}}</p>
+              {% if target.album is not none %}
+              <p>Album: {{target.album}}</p>
+                {% endif %}
+          </div>
+        </div>
+        <div class="buttons-container">
+          <button title="Remove"><span class="material-icons">close</span></button>
+          <button title="Add"><span class="material-icons">add</span></button>
+          <button title="Schedule"><span class="material-icons">schedule</span></button>
+          <button title="Auto"><span class="material-icons">smart_toy</span></button>
+          <button title="Play"><span class="material-icons">play_arrow</span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Side -->
+    <div class="right">
+     {% for match in song_matches %}
+      <div class="song-card">
+        <button title="Add"><span class="material-icons">add</span></button>
+        <img src="{{match.thumbnail}}" alt="Matches Album Art" class="song-image">
+        <div class="song-right-info">
+          <div class="song-right-text">
+            <div class="song-info">
+              <h2>{{match.title}}</h2>
+              <p>{{match.artists}}</p>
+              {% if match.album is not none %}
+              <p> Album: {{ match.album }} </p>
+                {% endif %}
+
+            </div>
+          </div>
+        </div>
+            <div class="match-score">Match {{match.score}}%</div>
+      </div>
+      {% endfor %}
+
+
+    </div>
+  </div>
+</body>
+</html>
+
