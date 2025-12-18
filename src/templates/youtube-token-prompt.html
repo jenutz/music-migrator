@@ -1,0 +1,17 @@
+<!-- about.html -->
+{% extends "base-token-prompt.html" %}
+
+{% block service %}youtube{% endblock %}
+
+{% block title%}Вход в Youtube Music{% endblock %}
+
+{% block description%}
+Для входа необходимо зайти на https://music.youtube.com/library включить
+режим разработчика (f12) и во вкладке Network найти запрос содержащий "/browse"
+скопировать Request Header
+
+Более подробно:
+https://ytmusicapi.readthedocs.io/en/stable/setup/browser.html
+{% endblock %}
+
+{% block prompt%}Вставте Request Header {% endblock %}

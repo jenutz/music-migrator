@@ -16,7 +16,10 @@ venv/
 # Logs and temp files
 *log
 *tmp
+TODO
 .DS_Store
 *.json
 *.db
 *.key
+*.svg
+*.ico
