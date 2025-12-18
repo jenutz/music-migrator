@@ -1,25 +1,38 @@
-# Python cache files
+# Python
 __pycache__/
 *.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 
-# Virtual environments
+# Virtual envs
 venv/
-.env
+.venv/
 
-# IDE/editor files
+# Local data + secrets (never commit tokens)
+data/
+secrets/
+.env
+.env.*
+*.db
+*.db-wal
+*.db-shm
+*.key
+
+# Scratch space
+shit/
+TODO
+
+# IDE / OS
 .idea/
 .vscode/
-
-# Jupyter checkpoints
-.ipynb_checkpoints/
-
-# Logs and temp files
-*log
-*tmp
-TODO
 .DS_Store
-*.json
-*.db
-*.key
-*.svg
-*.ico
+.directory
+
+# Logs
+*.log
+
+# Static assets we do want to keep
+!app/static/*.svg
+!app/static/*.ico

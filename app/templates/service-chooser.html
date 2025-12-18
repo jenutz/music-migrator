@@ -1,0 +1,49 @@
+<div 
+    class="services-frame" 
+    style="
+        display: flex; 
+        flex-direction: column; 
+        align-items: center; 
+        padding: 30px; 
+        border: 2px solid #ccc; 
+        border-radius: 12px; 
+        background-color: #fff; 
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+        max-width: 800px; 
+        margin: 40px auto;
+    "
+>
+    <!-- Title -->
+    <h2 style="margin-bottom: 20px; font-size: 22px; color: #333;">{{ title }}</h2>
+
+    <!-- Services row -->
+    <div class="services-row" style="display: flex; gap: 30px; align-items: center; flex-wrap: wrap; justify-content: center;">
+      {% for sid in services %}
+        <div class="service-item" style="text-align: center;">
+          <button 
+            onclick="handleServiceClick('{{ sid }}')" 
+            style="
+              width: 100px; 
+              height: 100px; 
+              background: #fff; 
+              border: 2px solid #ccc; 
+              border-radius: 12px; 
+              cursor: pointer; 
+              display: flex; 
+              flex-direction: column; 
+              align-items: center; 
+              justify-content: center;
+              transition: all 0.2s;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+              padding: 0;
+            "
+            onmouseover="this.style.transform='scale(1.05)'; this.style.borderColor='#888'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)';"
+            onmouseout="this.style.transform='scale(1)'; this.style.borderColor='#ccc'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';"
+          >
+            <img src="{{ url_for('static', path=sid ~ '_icon.svg') }}" alt="Service {{ sid }} icon" style="width: 50%; height: 50%; object-fit: contain;">
+            <span style="margin-top: 6px; font-size: 14px; color: #333;">{{ fullname[sid] }}</span>
+          </button>
+        </div>
+      {% endfor %}
+    </div>
+</div>
