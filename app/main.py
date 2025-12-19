@@ -63,6 +63,30 @@ def dashboard_context() -> dict:
     }
 
 
+# Client libraries raise huge, opaque errors. Translate the common ones so the
+# UI can show a sentence instead of a wall of JSON.
+_AUTH_HINTS = (
+    "twoColumnBrowseResultsRenderer",
+    "signInEndpoint",
+    "Sign in to listen",
+)
+
+
+def _explain(exc: Exception, service: str) -> HTTPException:
+    text = str(exc)
+
+    if any(hint in text for hint in _AUTH_HINTS):
+        return HTTPException(401, f"{service}: token expired or invalid, paste a fresh one")
+
+    if "Unauthorized" in text or "unauthorized" in text or "401" in text[:200]:
+        return HTTPException(401, f"{service}: token rejected by the service")
+
+    if "Network" in text or "ConnectionError" in type(exc).__name__:
+        return HTTPException(502, f"{service}: cannot reach the service ({type(exc).__name__})")
+
+    return HTTPException(502, f"{service}: {type(exc).__name__}: {text[:300]}")
+
+
 # --- pages ----------------------------------------------------------------
 
 
@@ -134,7 +158,7 @@ def import_library(service: str):
         raise HTTPException(400, str(exc))
     except Exception as exc:  # network / auth errors from the service
         logger.exception("Import failed for %s", svc.value)
-        raise HTTPException(502, f"{type(exc).__name__}: {exc}")
+        raise _explain(exc, svc.value)
 
     result.update(ImportService.status(svc.value))
     return result
@@ -168,7 +192,7 @@ def candidates(src_track_id: int, dst: str, refresh: bool = False, query: str | 
         raise HTTPException(400, str(exc))
     except Exception as exc:
         logger.exception("Search failed")
-        raise HTTPException(502, f"{type(exc).__name__}: {exc}")
+        raise _explain(exc, dst)
 
 
 class ChoosePayload(BaseModel):
@@ -208,7 +232,7 @@ def apply(src: str, dst: str, limit: int = 50):
         raise HTTPException(400, str(exc))
     except Exception as exc:
         logger.exception("Apply failed")
-        raise HTTPException(502, f"{type(exc).__name__}: {exc}")
+        raise _explain(exc, dest.value)
 
 
 @app.get("/health")

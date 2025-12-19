@@ -204,3 +204,29 @@ def test_migrate_page_renders(client):
     response = client.get("/migrate/yandex/youtube")
     assert response.status_code == 200
     assert "Yandex Music" in response.text
+
+
+def test_stale_youtube_token_gives_actionable_error(client, monkeypatch):
+    def explode(*args, **kwargs):
+        raise KeyError("Unable to find 'twoColumnBrowseResultsRenderer' using path [...]")
+
+    monkeypatch.setattr("app.services.import_service.choose_api", explode)
+
+    client.post("/api/token/youtube", json={"value": "stale-header-block"})
+    response = client.post("/api/import/youtube")
+
+    assert response.status_code == 401
+    assert "paste a fresh one" in response.json()["detail"]
+
+
+def test_network_failure_is_not_a_500(client, monkeypatch):
+    def offline(*args, **kwargs):
+        raise ConnectionError("Network is unreachable")
+
+    monkeypatch.setattr("app.services.import_service.choose_api", offline)
+
+    client.post("/api/token/yandex", json={"value": "y0-token"})
+    response = client.post("/api/import/yandex")
+
+    assert response.status_code == 502
+    assert "cannot reach" in response.json()["detail"]
