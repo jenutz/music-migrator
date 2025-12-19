@@ -9,7 +9,7 @@ export function toast(message, kind = "") {
   el.className = `toast ${kind}`;
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 3600);
 }
 
 export async function api(url, options = {}) {
@@ -23,23 +23,21 @@ export async function api(url, options = {}) {
   try { payload = text ? JSON.parse(text) : null; } catch { payload = { detail: text }; }
 
   if (!response.ok) {
-    throw new Error(payload?.detail || `Request failed (${response.status})`);
+    throw new Error(payload?.detail || `Ошибка запроса (${response.status})`);
   }
   return payload;
 }
 
-export function withBusy(button, fn) {
-  return async (...args) => {
-    if (!button) return fn(...args);
-    button.disabled = true;
-    button.classList.add("loading");
-    try {
-      return await fn(...args);
-    } finally {
-      button.classList.remove("loading");
-      button.disabled = false;
-    }
-  };
+export function formatDuration(seconds) {
+  if (!seconds) return "—";
+  const total = Number(seconds);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+}
+
+export function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[char]));
 }
 
 export { $, $$ };

@@ -1,30 +1,58 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Music Migrator{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v={{ time }}">
-  <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}?v={{ time }}">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}?v={{ time }}">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  {% block head %}{% endblock %}
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="/">
-      <span class="brand-mark">♪</span>
-      <span>Music Migrator</span>
-    </a>
-    <nav class="topbar-right">
-      {% block topbar %}{% endblock %}
-    </nav>
-  </header>
+  <aside class="sidebar">
+    <h1>
+      Music Migrator
+      <small>перенос медиатеки между сервисами</small>
+    </h1>
 
-  <main class="page">
+    {% for sid in services %}
+    {% set st = statuses[sid] %}
+    <div class="service-row" data-service="{{ sid }}" data-fullname="{{ fullname[sid] }}">
+      <div class="service-header">
+        <img class="service-icon" src="{{ url_for('static', path=sid ~ '_icon.svg') }}?v={{ time }}" alt="{{ sid }}">
+        <div class="service-name">{{ fullname[sid] }}</div>
+        <div class="service-state {% if st.has_token %}ok{% endif %}">
+          {% if st.has_token %}подключён{% else %}нет токена{% endif %}
+        </div>
+      </div>
+
+      <div class="token-box">
+        <textarea placeholder="Вставьте токен / заголовки запроса"></textarea>
+        <div class="hint">{{ token_help[sid] | safe }}</div>
+        <div class="buttons">
+          <button class="save-token">Сохранить</button>
+          <button class="secondary cancel-token">Отмена</button>
+        </div>
+      </div>
+
+      <div class="buttons">
+        <button class="login-btn">Войти</button>
+        <button class="load-btn" {% if not st.has_token %}disabled{% endif %}>Загрузить</button>
+        <button class="view-btn" {% if not st.imported %}disabled{% endif %}>Просмотр</button>
+        <button class="export-btn" {% if not st.imported %}disabled{% endif %}>Экспорт</button>
+      </div>
+
+      <div class="placeholder-text">
+        {% if st.imported %}Загружено треков: {{ st.imported }}{% else %}Медиатека ещё не загружена{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </aside>
+
+  <main id="main-content">
     {% block content %}{% endblock %}
   </main>
-
-  <footer class="foot small muted">
-    Personal tool. No accounts, no tracking, tokens stay in your local database.
-  </footer>
 
   <div id="toast" class="toast" hidden></div>
 

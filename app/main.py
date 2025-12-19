@@ -54,12 +54,22 @@ def _pair(src: str, dst: str) -> tuple[MusicService, MusicService]:
     return source, dest
 
 
+# Short instructions shown under the token field, per service.
+TOKEN_HELP = {
+    "yandex": 'Токен: <a href="https://yandex-music.readthedocs.io/en/main/token.html" '
+              'target="_blank" rel="noopener">инструкция</a>',
+    "youtube": 'Откройте <a href="https://music.youtube.com" target="_blank" rel="noopener">music.youtube.com</a>, '
+               'F12 → Network, найдите запрос с "/browse" и скопируйте заголовки целиком.',
+}
+
+
 def dashboard_context() -> dict:
     statuses = {s.value: ImportService.status(s.value) for s in MusicService}
     return {
         "statuses": statuses,
         "fullname": FULL_NAME,
         "services": [s.value for s in MusicService],
+        "token_help": TOKEN_HELP,
     }
 
 
@@ -165,6 +175,18 @@ def import_library(service: str):
 
 
 # --- matching -------------------------------------------------------------
+
+
+@app.get("/api/library/{service}")
+def library(service: str):
+    """Whole imported library of one service, in playlist order (table view)."""
+    svc = _service(service)
+    playlist = db.get_liked_playlist(svc.value)
+    if not playlist:
+        return {"service": svc.value, "tracks": []}
+
+    rows = db.get_playlist_tracks(playlist["id"])
+    return {"service": svc.value, "tracks": [dict(row) for row in rows]}
 
 
 @app.get("/api/tracks")

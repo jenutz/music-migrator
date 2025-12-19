@@ -1,77 +1,27 @@
 {% extends "base.html" %}
-{% block title %}Music Migrator — Dashboard{% endblock %}
+{% block title %}Music Migrator{% endblock %}
 
 {% block content %}
-<section class="intro">
-  <h1>Move your library</h1>
-  <p class="muted">
-    Import the tracks you liked on one service, review the best match on the other,
-    then like them all in the original order.
+<div class="welcome">
+  <h2>Перенос медиатеки</h2>
+  <p style="color:#555">
+    Приложение берёт треки, которые вам нравятся в одном сервисе, ищет их по
+    названию и исполнителю во втором, показывает варианты на выбор и ставит
+    лайки в исходном порядке.
   </p>
-</section>
-
-<section class="service-grid">
-  {% for sid in services %}
-  {% set st = statuses[sid] %}
-  <article class="card service-card" data-service="{{ sid }}">
-    <header class="service-head">
-      <img class="service-icon" src="{{ url_for('static', path=sid ~ '_icon.svg') }}?v={{ time }}" alt="{{ sid }}">
-      <div>
-        <h2>{{ fullname[sid] }}</h2>
-        <p class="muted small">
-          {% if st.has_token %}<span class="dot ok"></span>Connected{% else %}<span class="dot off"></span>No token{% endif %}
-          · {{ st.imported }} tracks imported
-        </p>
-      </div>
-    </header>
-
-    <label class="field">
-      <span>Access token</span>
-      <textarea class="token-input" rows="3" placeholder="Paste token / request headers"></textarea>
-    </label>
-
-    <div class="row gap">
-      <button class="btn primary save-token">Save token</button>
-      <button class="btn ghost clear-token" {% if not st.has_token %}disabled{% endif %}>Clear</button>
-    </div>
-
-    <div class="row gap">
-      <button class="btn secondary import-btn" {% if not st.has_token %}disabled{% endif %}>
-        {% if st.imported %}Re-import library{% else %}Import library{% endif %}
-      </button>
-    </div>
-
-    <p class="status-line small muted"></p>
-  </article>
-  {% endfor %}
-</section>
-
-<section class="card migrate-card">
-  <h2>Start matching</h2>
-  <p class="muted small">Pick where the music comes from and where it should go.</p>
-  <form id="migrate-form" class="row gap wrap">
-    <label class="field inline">
-      <span>From</span>
-      <select id="src-select">
-        {% for sid in services %}
-        <option value="{{ sid }}">{{ fullname[sid] }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <button type="button" id="swap" class="btn ghost" title="Swap">⇄</button>
-    <label class="field inline">
-      <span>To</span>
-      <select id="dst-select">
-        {% for sid in services %}
-        <option value="{{ sid }}">{{ fullname[sid] }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <button class="btn primary" type="submit">Open workspace</button>
-  </form>
-</section>
+  <ol>
+    <li>Нажмите <b>Войти</b> у сервиса и вставьте токен — он хранится только локально.</li>
+    <li>Нажмите <b>Загрузить</b>, чтобы забрать медиатеку в базу.</li>
+    <li><b>Просмотр</b> — таблица загруженных треков.</li>
+    <li><b>Экспорт</b> — выберите сервис назначения и сопоставляйте треки по одному.</li>
+  </ol>
+  <p style="color:#777;font-size:.85em;margin-bottom:0">
+    Учётных записей нет: приложением пользуется один человек, все данные лежат
+    в <code>data/app.db</code>.
+  </p>
+</div>
 {% endblock %}
 
 {% block scripts %}
-<script type="module" src="{{ url_for('static', path='dashboard.js') }}?v={{ time }}"></script>
+<script type="module" src="{{ url_for('static', path='sidebar.js') }}?v={{ time }}"></script>
 {% endblock %}
