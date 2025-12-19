@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Music Migrator{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v={{ time }}">
+  <link rel="icon" href="{{ url_for('static', path='favicon.ico') }}?v={{ time }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">♪</span>
+      <span>Music Migrator</span>
+    </a>
+    <nav class="topbar-right">
+      {% block topbar %}{% endblock %}
+    </nav>
+  </header>
+
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="foot small muted">
+    Personal tool. No accounts, no tracking, tokens stay in your local database.
+  </footer>
+
+  <div id="toast" class="toast" hidden></div>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

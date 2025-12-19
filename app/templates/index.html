@@ -1,175 +1,77 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
+{% block title %}Music Migrator — Dashboard{% endblock %}
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MusicMigrator</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v={{ time }}">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <!-- DataTables CSS -->
-  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-  
-  <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico')}}?v={{ time }}">
-  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-  </head>
-  
-  <body>
-    <!-- Sidebar -->
-    <div class="sidebar">
-      {% for sid in services %}
-      <div class="service-row">
-        <div class="service-header">
-          <img src="{{ url_for('static', path=sid ~ '_icon.svg') }}" alt="Service {{ sid }} icon"
-            style="height: 46px; width: auto;">
-  
-          <div class="service-name">{{ fullname[sid] }}</div>
-  
-        </div>
-  
-        <div class="buttons">
-          <!-- Action button -->
-          <button data-action="renderMainContent" data-url="token-prompt/{{ sid }}">Войти</button>
-          <button data-action="execute" data-required="token-{{sid}}" data-url="fetch-tracks/{{ sid }}">Загрузить</button>
-          <button data-action="renderMainContent" data-required="store-{{sid}}" data-url='/table/{{ sid }}'">Просмотр</button>
-          <button data-action="renderMainContent" data-required="store-{{sid}}" data-url='/choose-import/{{ sid }}'">Экспорт</button>
-        </div>
-  
-        <div class=" placeholder-text">Описание для {{ sid }}
-        </div>
+{% block content %}
+<section class="intro">
+  <h1>Move your library</h1>
+  <p class="muted">
+    Import the tracks you liked on one service, review the best match on the other,
+    then like them all in the original order.
+  </p>
+</section>
+
+<section class="service-grid">
+  {% for sid in services %}
+  {% set st = statuses[sid] %}
+  <article class="card service-card" data-service="{{ sid }}">
+    <header class="service-head">
+      <img class="service-icon" src="{{ url_for('static', path=sid ~ '_icon.svg') }}?v={{ time }}" alt="{{ sid }}">
+      <div>
+        <h2>{{ fullname[sid] }}</h2>
+        <p class="muted small">
+          {% if st.has_token %}<span class="dot ok"></span>Connected{% else %}<span class="dot off"></span>No token{% endif %}
+          · {{ st.imported }} tracks imported
+        </p>
       </div>
-      {% endfor %}
+    </header>
+
+    <label class="field">
+      <span>Access token</span>
+      <textarea class="token-input" rows="3" placeholder="Paste token / request headers"></textarea>
+    </label>
+
+    <div class="row gap">
+      <button class="btn primary save-token">Save token</button>
+      <button class="btn ghost clear-token" {% if not st.has_token %}disabled{% endif %}>Clear</button>
     </div>
-  
-    <div id="main-content"></div>
-  
-  
-  </body>
-  
-  <script type="module">
-    const completed = new Set({{ data_completed | tojson }});
 
-    // helper to enable buttons based on requirements
-    function reevaluateButtons() {
-      document.querySelectorAll("button[data-required]").forEach(btn => {
-        const reqs = btn.dataset.required.split(/\s+/);
-        const enabled = reqs.every(r => completed.has(r));
-        btn.disabled = !enabled;
+    <div class="row gap">
+      <button class="btn secondary import-btn" {% if not st.has_token %}disabled{% endif %}>
+        {% if st.imported %}Re-import library{% else %}Import library{% endif %}
+      </button>
+    </div>
 
-        // optional: add/remove class for better styling
-        btn.classList.toggle("locked", !enabled);
-      });
-    }
-    reevaluateButtons()
-    // helper to mark a requirement as completed
-    function markCompleted(flag) {
-      completed.add(flag);
-      reevaluateButtons();
-    }
+    <p class="status-line small muted"></p>
+  </article>
+  {% endfor %}
+</section>
 
-    const actions = {
-      renderMainContent: async (btn) => {
-        const main = document.getElementById("main-content");
-        if (!btn.dataset.url) {
-          main.innerHTML = "";
-          return;
-        }
-        const res = await fetch(btn.dataset.url);
-        main.innerHTML = await res.text();
+<section class="card migrate-card">
+  <h2>Start matching</h2>
+  <p class="muted small">Pick where the music comes from and where it should go.</p>
+  <form id="migrate-form" class="row gap wrap">
+    <label class="field inline">
+      <span>From</span>
+      <select id="src-select">
+        {% for sid in services %}
+        <option value="{{ sid }}">{{ fullname[sid] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="button" id="swap" class="btn ghost" title="Swap">⇄</button>
+    <label class="field inline">
+      <span>To</span>
+      <select id="dst-select">
+        {% for sid in services %}
+        <option value="{{ sid }}">{{ fullname[sid] }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn primary" type="submit">Open workspace</button>
+  </form>
+</section>
+{% endblock %}
 
-        // mark as completed if specified
-        if (btn.dataset.completes) markCompleted(btn.dataset.completes);
-      },
-
-      execute: async (btn) => {
-        const res = await fetch(btn.dataset.url, { method: "POST" });
-        if (res.ok && btn.dataset.completes) markCompleted(btn.dataset.completes);
-      },
-
-      navigate: (btn) => {
-        window.location.href = btn.dataset.url;
-      },
-
-      submitToken: async (btn) => {
-        const selector = btn.dataset.source;
-        const source = document.querySelector(selector);
-
-        if (!source) {
-          console.error("Target element not found:", selector);
-          return;
-        }
-
-        const value = source.value;
-
-        const res = await fetch(btn.dataset.url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ value })
-        });
-
-        if (res.ok && btn.dataset.completes) {
-          markCompleted(btn.dataset.completes);
-          const main = document.getElementById("main-content");
-          main.innerHTML = "";
-        }
-      }
-    };
-
-    // universal click handler
-    document.addEventListener("click", async (e) => {
-      const btn = e.target.closest("button[data-action]");
-      if (!btn) return;
-
-      // check requirements first
-      if (btn.dataset.required) {
-        const reqs = btn.dataset.required.split(/\s+/);
-        const satisfied = reqs.every(r => completed.has(r));
-        if (!satisfied) return; // ignore clicks if requirements not met
-      }
-
-      const actionFn = actions[btn.dataset.action];
-      if (!actionFn) {
-        alert("Action handler not found: " + btn.dataset.action)
-        return;
-      }
-
-      await actionFn(btn); // call the original action
-    });
-  </script>
-
-
-    <!-- jQuery -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <!-- DataTables JS -->
-    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
-    <script>
-        $(document).ready(function () {
-            $('#songsTable').DataTable({
-                "pageLength": 1000,       // Show 25 rows per page by default
-                "order": [[0, "dsc"]],   // default sort by ID ascending
-
-                "columnDefs": [
-                    { "className": "text-center", "targets": [0, 1, 2, 3] },  // force center
-                    { "type": "num", "targets": [0, 3] }                        // numeric sorting
-                ],
-
-                "language": {
-                    "search": "Поиск:",
-                    "lengthMenu": "Показать _MENU_ записей",
-                    "info": "Показано с _START_ по _END_ из _TOTAL_ записей",
-                    "paginate": {
-                        "first": "Первая",
-                        "last": "Последняя",
-                        "next": "Следующая",
-                        "previous": "Предыдущая"
-                    },
-                    "zeroRecords": "Записи не найдены"
-                }
-            });
-        });
-    </script>
-  
-  </html>
+{% block scripts %}
+<script type="module" src="{{ url_for('static', path='dashboard.js') }}?v={{ time }}"></script>
+{% endblock %}

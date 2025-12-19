@@ -1,0 +1,14 @@
+services:
+  app:
+    build: .
+    container_name: music-migrator
+    ports:
+      - "8000:8000"
+    environment:
+      DATA_DIR: /srv/data
+    volumes:
+      - app_data:/srv/data
+    restart: unless-stopped
+
+volumes:
+  app_data:

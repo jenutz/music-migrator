@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Migrating {{ src_name }} → {{ dst_name }}{% endblock %}
+
+{% block topbar %}
+<a class="btn ghost" href="/">Dashboard</a>
+{% endblock %}
+
+{% block content %}
+<section
+  class="workspace"
+  id="workspace"
+  data-src="{{ src }}"
+  data-dst="{{ dst }}"
+  data-src-name="{{ src_name }}"
+  data-dst-name="{{ dst_name }}"
+>
+  <aside class="track-list">
+    <header class="track-list-head">
+      <h2>{{ src_name }}</h2>
+      <div class="progress"><span id="progress-bar"></span></div>
+      <p class="small muted" id="progress-text">Loading…</p>
+      <div class="legend small">
+        <span><i class="chip chosen"></i>chosen</span>
+        <span><i class="chip applied"></i>applied</span>
+        <span><i class="chip skipped"></i>skipped</span>
+        <span><i class="chip"></i>todo</span>
+      </div>
+    </header>
+    <ul id="track-items" class="track-items"></ul>
+  </aside>
+
+  <section class="detail">
+    <div id="empty-state" class="empty" hidden>
+      <h2>Nothing to review</h2>
+      <p class="muted">Import a library on the dashboard first.</p>
+    </div>
+
+    <div id="source-pane" class="pane">
+      <div class="pane-head">
+        <h3>Source track <span class="badge" id="track-index"></span></h3>
+        <div class="row gap">
+          <button class="btn ghost" id="prev-track" title="Previous">←</button>
+          <button class="btn ghost" id="next-track" title="Next">→</button>
+        </div>
+      </div>
+      <div class="track-card" id="source-card"></div>
+    </div>
+
+    <div class="pane">
+      <div class="pane-head">
+        <h3>Matches on {{ dst_name }}</h3>
+        <form id="search-form" class="row gap">
+          <input id="search-input" type="search" placeholder="Search differently…">
+          <button class="btn secondary" type="submit">Search</button>
+        </form>
+      </div>
+      <ul class="candidates" id="candidates"></ul>
+      <p class="hint small muted">
+        Shortcuts: <kbd>1</kbd>–<kbd>9</kbd> pick · <kbd>s</kbd> skip · <kbd>n</kbd> next
+      </p>
+    </div>
+  </section>
+
+  <footer class="apply-bar">
+    <div class="apply-info">
+      <strong id="apply-chosen">0</strong> chosen ·
+      <strong id="apply-applied">0</strong> applied ·
+      <strong id="apply-skipped">0</strong> skipped ·
+      <strong id="apply-total">0</strong> total
+    </div>
+    <button class="btn primary" id="apply-btn" disabled>
+      Like chosen tracks on {{ dst_name }}
+    </button>
+  </footer>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="{{ url_for('static', path='workspace.js') }}?v={{ time }}"></script>
+{% endblock %}
