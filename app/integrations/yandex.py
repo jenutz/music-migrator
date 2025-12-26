@@ -19,7 +19,19 @@ class YandexClient(BaseMusicApi):
     # --- normalization ---------------------------------------------------
 
     @staticmethod
-    def _normalize(track: "yandex_music.Track") -> dict:
+    def _cover(album) -> str | None:
+        """Albums occasionally come back without a cover, and the library
+        asserts on that instead of returning None."""
+        cover_uri = getattr(album, "cover_uri", None)
+        if not isinstance(cover_uri, str):
+            return None
+        try:
+            return album.get_cover_url("200x200")
+        except (AssertionError, ValueError):
+            return None
+
+    @classmethod
+    def _normalize(cls, track: "yandex_music.Track") -> dict:
         album = track.albums[0] if track.albums else None
         return {
             "service": "yandex",
@@ -27,7 +39,7 @@ class YandexClient(BaseMusicApi):
             "title": track.title or "",
             "artists": ", ".join(a.name for a in track.artists or []),
             "album": getattr(album, "title", None),
-            "thumbnail": album.get_cover_url("200x200") if album else None,
+            "thumbnail": cls._cover(album) if album else None,
             "duration_s": track.duration_ms // 1000 if track.duration_ms else None,
         }
 

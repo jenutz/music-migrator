@@ -34,15 +34,26 @@ class ImportService:
         client = choose_api(self.service, token)
         logger.info("Fetching liked tracks from %s", self.service)
         raw = client.get_liked_tracks()
-        tracks = [self._clean(t) for t in raw if t.get("external_id")]
+
+        tracks = []
+        skipped = 0
+        for track in raw:
+            if not track.get("external_id"):
+                continue
+            try:
+                tracks.append(self._clean(track))
+            except Exception:  # one weird track should not sink the import
+                skipped += 1
+                logger.warning("Skipping unparsable %s track: %r", self.service, track)
 
         playlist_id = db.replace_liked_playlist(self.service, LIBRARY_NAME, tracks)
-        logger.info("Stored %s tracks for %s", len(tracks), self.service)
+        logger.info("Stored %s tracks for %s (%s skipped)", len(tracks), self.service, skipped)
 
         return {
             "service": self.service,
             "playlist_id": playlist_id,
             "imported": len(tracks),
+            "skipped": skipped,
         }
 
     @staticmethod
