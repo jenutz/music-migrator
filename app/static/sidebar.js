@@ -14,6 +14,7 @@ function showWelcome() {
 }
 
 function renderChooser(sourceService, sourceName) {
+  delete main.dataset.view;
   const others = $$(".service-row")
     .map((row) => row.dataset.service)
     .filter((svc) => svc !== sourceService);
@@ -92,6 +93,7 @@ function sortTracks(tracks, key, direction) {
 }
 
 async function renderLibrary(service, serviceName) {
+  main.dataset.view = "library";
   main.innerHTML = `
     <div class="main-header">
       <h2>${escapeHtml(serviceName)}</h2>
