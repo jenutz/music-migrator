@@ -120,11 +120,106 @@ function setState(row, connected, imported) {
   $(".export-btn", row).disabled = !imported;
 }
 
+// --- yandex device flow ---------------------------------------------------
+
+function wireDeviceAuth(row, box) {
+  const button = $(".device-btn", row);
+  if (!button) return;
+
+  const panel = $(".device-panel", row);
+  const codeEl = $(".device-code", row);
+  const linkEl = $(".device-link", row);
+  const statusEl = $(".device-status", row);
+
+  let timer = null;
+  const stopPolling = () => {
+    if (timer) clearInterval(timer);
+    timer = null;
+  };
+
+  const showPanel = (status) => {
+    panel.hidden = false;
+    button.disabled = true;
+    statusEl.textContent = status;
+  };
+
+  const fail = (message) => {
+    stopPolling();
+    showPanel(message || "Не удалось войти");
+    button.disabled = false;
+  };
+
+  const succeed = () => {
+    stopPolling();
+    panel.hidden = true;
+    button.disabled = false;
+    box.classList.remove("open");
+    setState(row, true, Number(row.dataset.imported || 0));
+    toast("Яндекс подключён", "ok");
+  };
+
+  async function poll() {
+    let data;
+    try {
+      data = await api("/api/auth/yandex/status");
+    } catch {
+      return; // transient hiccup, next tick will retry
+    }
+
+    if (data.state === "pending") {
+      if (data.user_code) codeEl.textContent = data.user_code;
+      if (data.verification_url) linkEl.href = data.verification_url;
+      return;
+    }
+
+    if (data.state === "success") return succeed();
+    if (data.state === "cancelled") {
+      stopPolling();
+      panel.hidden = true;
+      button.disabled = false;
+      return;
+    }
+    if (data.state === "error") return fail(data.error);
+
+    stopPolling();
+  }
+
+  button.addEventListener("click", async () => {
+    if (timer) return; // already waiting
+
+    codeEl.textContent = "…";
+    showPanel("Запрашиваем код у Яндекса…");
+
+    try {
+      const data = await api("/api/auth/yandex/start", { method: "POST" });
+      if (data.user_code) codeEl.textContent = data.user_code;
+      if (data.verification_url) linkEl.href = data.verification_url;
+      stopPolling();
+      timer = setInterval(poll, 2000);
+    } catch (error) {
+      fail(error.message);
+    }
+  });
+
+  $(".device-cancel", row).addEventListener("click", async () => {
+    stopPolling();
+    panel.hidden = true;
+    button.disabled = false;
+    try {
+      await api("/api/auth/yandex/cancel", { method: "POST" });
+    } catch {
+      /* nothing useful to do here */
+    }
+  });
+}
+
 for (const row of $$(".service-row")) {
   const service = row.dataset.service;
   const fullname = row.dataset.fullname;
   const box = $(".token-box", row);
   const textarea = $("textarea", box);
+
+  wireDeviceAuth(row, box);
 
   $(".login-btn", row).addEventListener("click", () => {
     box.classList.toggle("open");

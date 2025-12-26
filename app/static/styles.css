@@ -557,3 +557,74 @@ table.library img.thumb {
 
 /* push the source "open in service" link to the far right of the card */
 .track-card .open-link { margin-left: auto; }
+
+/* --- yandex device flow ----------------------------------------------- */
+
+.device-auth {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.device-auth .device-btn {
+  padding: 6px 12px;
+  border: 1px solid #ffdb4d;
+  border-radius: 6px;
+  background: #ffdb4d;
+  color: #222;
+  font: inherit;
+  font-size: 0.85em;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.device-auth .device-btn:hover:not(:disabled) { background: #ffd21a; }
+
+.device-panel {
+  border: 1px solid #eee;
+  border-radius: 8px;
+  background: #fffdf3;
+  padding: 10px 12px;
+  font-size: 0.8em;
+  color: #444;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.device-panel[hidden] { display: none; }
+
+.device-line { margin: 0; line-height: 1.5; }
+.device-line a { color: #007bff; }
+
+.device-code {
+  font-family: monospace;
+  font-size: 1.15em;
+  letter-spacing: 0.08em;
+  background: #fff;
+  border: 1px dashed #d6dadd;
+  border-radius: 5px;
+  padding: 1px 7px;
+  color: #222;
+}
+
+.device-status { margin: 0; color: #777; }
+
+.device-cancel {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  background: #e9ecef;
+  color: #333;
+  font: inherit;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.hint-or {
+  margin: 0 0 2px;
+  font-size: 0.72em;
+  color: #999;
+  text-transform: none;
+}

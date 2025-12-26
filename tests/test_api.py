@@ -230,3 +230,48 @@ def test_network_failure_is_not_a_500(client, monkeypatch):
 
     assert response.status_code == 502
     assert "cannot reach" in response.json()["detail"]
+
+
+# --- yandex device flow endpoints ----------------------------------------
+
+
+def test_device_flow_status_starts_idle(client):
+    from app.main import yandex_auth
+
+    yandex_auth.reset()
+    response = client.get("/api/auth/yandex/status")
+
+    assert response.status_code == 200
+    assert response.json()["state"] == "idle"
+
+
+def test_device_flow_start_exposes_the_user_code(client, monkeypatch):
+    from app.services.auth_service import YandexDeviceAuth
+    from tests.test_auth import StubOAuthClient, token, wait_for
+
+    manager = YandexDeviceAuth(lambda: StubOAuthClient(token=token()))
+    monkeypatch.setattr("app.main.yandex_auth", manager)
+
+    started = client.post("/api/auth/yandex/start")
+    assert started.status_code == 200
+
+    wait_for(manager, "success")
+    response = client.get("/api/auth/yandex/status")
+
+    assert response.json()["state"] == "success"
+    assert db.get_setting("token-yandex") == "yandex-access"
+
+
+def test_device_flow_can_be_cancelled(client, monkeypatch):
+    from app.services.auth_service import YandexDeviceAuth
+    from tests.test_auth import BlockingOAuthClient, wait_for
+
+    manager = YandexDeviceAuth(lambda: BlockingOAuthClient())
+    monkeypatch.setattr("app.main.yandex_auth", manager)
+
+    client.post("/api/auth/yandex/start")
+    wait_for(manager, "pending")
+
+    response = client.post("/api/auth/yandex/cancel")
+    assert response.status_code == 200
+    assert response.json()["state"] == "cancelled"

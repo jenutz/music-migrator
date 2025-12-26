@@ -28,6 +28,21 @@
       </div>
 
       <div class="token-box">
+        {% if sid == "yandex" %}
+        <div class="device-auth">
+          <button class="device-btn" type="button">Войти через Яндекс</button>
+          <div class="device-panel" hidden>
+            <p class="device-line">
+              Откройте <a class="device-link" href="https://ya.ru/device" target="_blank"
+              rel="noopener">страницу подтверждения</a> и введите код
+              <b class="device-code">…</b>
+            </p>
+            <p class="device-status">Ждём подтверждения…</p>
+            <button class="device-cancel secondary" type="button">Отмена</button>
+          </div>
+        </div>
+        <p class="hint-or">или вставьте токен вручную</p>
+        {% endif %}
         <textarea placeholder="Вставьте токен / заголовки запроса"></textarea>
         <div class="hint">{{ token_help[sid] | safe }}</div>
         <div class="buttons">

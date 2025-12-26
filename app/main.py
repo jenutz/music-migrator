@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from app import db
 from app.integrations import FULL_NAME, MusicService, reset_cache
-from app.services import ApplyService, ImportService, MatchService
+from app.services import ApplyService, ImportService, MatchService, yandex_auth
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -148,7 +148,28 @@ def clear_token(service: str):
     svc = _service(service)
     db.set_setting(f"token-{svc.value}", "")
     reset_cache()
+    if svc is MusicService.yandex:
+        yandex_auth.reset()
     return {"service": svc.value, "cleared": True}
+
+
+# --- yandex oauth device flow --------------------------------------------
+
+
+@app.post("/api/auth/yandex/start")
+def yandex_auth_start():
+    """Begin the device flow. Returns at once; the page polls for the result."""
+    return yandex_auth.start()
+
+
+@app.get("/api/auth/yandex/status")
+def yandex_auth_status():
+    return yandex_auth.status()
+
+
+@app.post("/api/auth/yandex/cancel")
+def yandex_auth_cancel():
+    return yandex_auth.cancel()
 
 
 # --- import ---------------------------------------------------------------

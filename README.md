@@ -8,7 +8,8 @@ a users table was just cost.
 
 ## How it works
 
-1. Paste a token for a service (both optional, you only need the ones you use).
+1. Connect a service — for Yandex press **Войти через Яндекс** and confirm the
+   code on the Yandex page; YouTube still takes a pasted header block.
 2. Import that service's liked tracks into the local database.
 3. Open the workspace: it shows one source track at a time, searches the other
    service by `title + artist`, and ranks candidates by a fuzzy score
@@ -37,13 +38,20 @@ Data lives in `data/app.db` (or `$DATA_DIR/app.db`).
 
 ## Tokens
 
-**Yandex Music** — https://yandex-music.readthedocs.io/en/main/token.html
+**Yandex Music** — press **Войти через Яндекс** in the sidebar: the app asks
+Yandex for a device code, shows it, and waits for you to confirm it on
+https://ya.ru/device. The token is saved to the local database. A manually
+pasted token still works as a fallback
+(https://yandex-music.readthedocs.io/en/main/token.html).
 
 **YouTube Music** — open https://music.youtube.com, F12 → Network, find a
 `/browse` request, copy the whole request header block and paste it in.
 Details: https://ytmusicapi.readthedocs.io/en/stable/setup/browser.html
 
 Neither token is written to the repo; `secrets/` and `data/` are gitignored.
+The device flow also stores `refresh_token` and the expiry timestamp, but the
+`yandex-music` library does not refresh tokens on its own — when the token
+expires, run the login again.
 
 ## Tests
 
