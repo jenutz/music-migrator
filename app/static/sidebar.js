@@ -44,6 +44,53 @@ function renderChooser(sourceService, sourceName) {
   });
 }
 
+// Thumbnails are stored at 200x200 and the table shows them at 48px. Yandex
+// puts the size in the last path segment, so ask for something close to the
+// display size (2x for retina) instead of scaling 200px down in the browser.
+function thumbUrl(url, size = "100x100") {
+  if (!url) return "";
+  return /\/\d+x\d+$/.test(url) ? url.replace(/\/\d+x\d+$/, `/${size}`) : url;
+}
+
+const collator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
+
+const LIBRARY_COLUMNS = [
+  { key: "position", label: "#", numeric: true },
+  { key: null, label: "" },
+  { key: "title", label: "Название" },
+  { key: "artists", label: "Исполнитель" },
+  { key: "album", label: "Альбом" },
+  { key: "duration_s", label: "Время", numeric: true },
+  { key: "external_id", label: "ID", numeric: true },
+];
+
+function sortTracks(tracks, key, direction) {
+  const rows = tracks.slice();
+
+  // No column selected keeps the imported playlist order.
+  if (!key) return rows.sort((a, b) => a.position - b.position);
+
+  const factor = direction === "desc" ? -1 : 1;
+
+  return rows.sort((a, b) => {
+    const left = a[key];
+    const right = b[key];
+    const leftEmpty = left === null || left === undefined || left === "";
+    const rightEmpty = right === null || right === undefined || right === "";
+
+    // Missing values stay at the bottom in both directions.
+    if (leftEmpty || rightEmpty) {
+      if (leftEmpty && rightEmpty) return 0;
+      return leftEmpty ? 1 : -1;
+    }
+
+    if (typeof left === "number" && typeof right === "number") {
+      return (left - right) * factor;
+    }
+    return collator.compare(String(left), String(right)) * factor;
+  });
+}
+
 async function renderLibrary(service, serviceName) {
   main.innerHTML = `
     <div class="main-header">
@@ -70,35 +117,131 @@ async function renderLibrary(service, serviceName) {
   }
 
   const link = TRACK_URL[service] || (() => "#");
+  const sort = { key: null, direction: "asc" };
 
   main.innerHTML = `
     <div class="main-header">
       <h2>${escapeHtml(serviceName)}</h2>
-      <span class="muted" id="library-count">${data.tracks.length} треков</span>
+      <span class="muted" id="library-count"></span>
     </div>
-    <div class="panel" style="overflow:auto">
-      <table class="library">
-        <thead>
-          <tr>
-            <th>#</th><th></th><th>Название</th><th>Исполнитель</th><th>Альбом</th><th>Время</th><th>ID</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${data.tracks.map((track, index) => `
+    <div class="panel table-panel">
+      <div class="table-scroll" id="table-scroll">
+        <table class="library">
+          <thead>
             <tr>
-              <td>${index + 1}</td>
-              <td>${track.thumbnail ? `<img class="thumb" src="${track.thumbnail}" alt="">` : ""}</td>
-              <td>${escapeHtml(track.title)}</td>
-              <td>${escapeHtml(track.artists || "")}</td>
-              <td>${escapeHtml(track.album || "")}</td>
-              <td>${formatDuration(track.duration_s)}</td>
-              <td class="mono"><a href="${link(track.external_id)}" target="_blank" rel="noopener">${escapeHtml(track.external_id)}</a></td>
+              ${LIBRARY_COLUMNS.map((column) => column.key
+                ? `<th data-sort="${column.key}" title="Сортировать">${column.label}<span class="arrow"></span></th>`
+                : `<th>${column.label}</th>`).join("")}
             </tr>
-          `).join("")}
-        </tbody>
-      </table>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div class="table-sentinel" id="table-sentinel"></div>
+      </div>
     </div>
   `;
+
+  const scroller = $("#table-scroll", main);
+  const tbody = $("tbody", main);
+  const sentinel = $("#table-sentinel", main);
+  const counter = $("#library-count", main);
+
+  // 1877 rows × a cover each is a lot of DOM for one paint, so rows are
+  // appended in batches as the user scrolls near the bottom.
+  const PAGE = 80;
+  let rows = [];
+  let rendered = 0;
+  let observer = null;
+
+  const rowHtml = (track) => `
+    <tr>
+      <td class="idx">${track.position + 1}</td>
+      <td class="cover">${track.thumbnail
+        ? `<img class="thumb" src="${thumbUrl(track.thumbnail)}" alt=""
+                loading="lazy" decoding="async" width="48" height="48">`
+        : ""}</td>
+      <td>${escapeHtml(track.title)}</td>
+      <td>${escapeHtml(track.artists || "")}</td>
+      <td>${escapeHtml(track.album || "")}</td>
+      <td class="num">${formatDuration(track.duration_s)}</td>
+      <td class="mono"><a href="${link(track.external_id)}" target="_blank" rel="noopener">${escapeHtml(track.external_id)}</a></td>
+    </tr>
+  `;
+
+  const renderFooterCount = () => {
+    counter.textContent = rendered < rows.length
+      ? `${rendered} из ${rows.length} треков`
+      : `${rows.length} треков`;
+  };
+
+  const appendPage = () => {
+    const next = rows.slice(rendered, rendered + PAGE);
+    if (!next.length) return;
+
+    tbody.insertAdjacentHTML("beforeend", next.map(rowHtml).join(""));
+    rendered += next.length;
+    renderFooterCount();
+
+    if (rendered >= rows.length) stopObserving();
+  };
+
+  const stopObserving = () => {
+    if (observer) observer.disconnect();
+    observer = null;
+    sentinel.hidden = true;
+  };
+
+  const startObserving = () => {
+    sentinel.hidden = false;
+
+    if (!("IntersectionObserver" in window)) {
+      // No observer: just put everything on the page.
+      while (rendered < rows.length) appendPage();
+      stopObserving();
+      return;
+    }
+
+    if (observer) observer.disconnect();
+    observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) appendPage();
+    }, { root: scroller, rootMargin: "300px" });
+    observer.observe(sentinel);
+  };
+
+  const rebuild = () => {
+    rows = sortTracks(data.tracks, sort.key, sort.direction);
+    rendered = 0;
+    tbody.innerHTML = "";
+    scroller.scrollTop = 0;
+    appendPage();
+    startObserving();
+  };
+
+  const renderHeader = () => {
+    for (const th of $$("th[data-sort]", main)) {
+      const active = th.dataset.sort === sort.key;
+      th.classList.toggle("sorted", active);
+      th.classList.toggle("desc", active && sort.direction === "desc");
+      $(".arrow", th).textContent = active ? (sort.direction === "desc" ? "▼" : "▲") : "";
+    }
+  };
+
+  $$("th[data-sort]", main).forEach((th) => {
+    th.addEventListener("click", () => {
+      const key = th.dataset.sort;
+      if (sort.key === key) {
+        sort.direction = sort.direction === "asc" ? "desc" : "asc";
+      } else {
+        sort.key = key;
+        sort.direction = "asc";
+      }
+      renderHeader();
+      rebuild();
+    });
+  });
+
+  renderHeader();
+  rebuild();
 }
 
 // --- sidebar wiring -------------------------------------------------------

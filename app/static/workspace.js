@@ -40,6 +40,13 @@ if (workspace) {
   const statusOf = (track) => track.status || "todo";
   const currentTrack = () => state.tracks[state.activeIndex];
 
+  // Covers come from the import at 200x200; the cards render them much
+  // smaller, so shrink the URL where the service lets us.
+  function cover(url, size) {
+    if (!url) return "";
+    return /\/\d+x\d+$/.test(url) ? url.replace(/\/\d+x\d+$/, `/${size}`) : url;
+  }
+
   // --- rendering ----------------------------------------------------------
 
   function renderProgress() {
@@ -108,7 +115,8 @@ if (workspace) {
     }
 
     els.sourceCard.innerHTML = `
-      <img src="${track.src_thumbnail || ""}" alt="" onerror="this.style.visibility='hidden'">
+      <img src="${cover(track.src_thumbnail, '100x100')}" alt="" loading="lazy"
+           decoding="async" onerror="this.style.visibility='hidden'">
       <div class="meta">
         <h4>${escapeHtml(track.src_title)}</h4>
         <p>${escapeHtml(track.src_artists || "")}</p>
@@ -138,7 +146,8 @@ if (workspace) {
       const li = document.createElement("li");
       li.innerHTML = `
         <span class="badge">${index + 1}</span>
-        <img src="${candidate.thumbnail || ""}" alt="" onerror="this.style.visibility='hidden'">
+        <img src="${cover(candidate.thumbnail, '100x100')}" alt="" loading="lazy"
+             decoding="async" onerror="this.style.visibility='hidden'">
         <div class="info">
           <h4>${escapeHtml(candidate.title)}</h4>
           <p>${escapeHtml(candidate.artists || "")}${candidate.album ? " · " + escapeHtml(candidate.album) : ""}</p>

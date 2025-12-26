@@ -247,9 +247,23 @@ button:disabled {
 
 /* --- library table ---------------------------------------------------- */
 
+/* The table is a panel body, so it borrows the panel's rounded corners:
+   padding moves to the cells and the scroll wrapper clips the corners. */
+.panel.table-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+.table-scroll {
+  max-height: calc(100vh - 200px);
+  overflow: auto;
+  border-radius: 12px;
+}
+
 table.library {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: 0.9em;
 }
 
@@ -267,11 +281,42 @@ table.library thead th {
   font-weight: 600;
   position: sticky;
   top: 0;
+  z-index: 1;
+  border-bottom: none;
 }
 
+table.library th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+table.library th[data-sort]:hover { background: #454d55; }
+table.library th.sorted { background: #454d55; }
+
+table.library th .arrow {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 0.7em;
+  opacity: 0.85;
+}
+
+table.library tbody tr:last-child td { border-bottom: none; }
 table.library tbody tr:hover { background: #f8f9fa; }
 table.library td.mono { font-family: monospace; font-size: 0.85em; }
-table.library img.thumb { width: 34px; height: 34px; border-radius: 5px; object-fit: cover; }
+table.library td.num { font-variant-numeric: tabular-nums; color: #555; }
+
+table.library td.cover { width: 60px; }
+
+table.library img.thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 7px;
+  object-fit: cover;
+  /* keeps the row from jumping while a cover is still loading */
+  background: #eef1f3;
+  display: block;
+}
 
 /* --- workspace -------------------------------------------------------- */
 
@@ -628,3 +673,10 @@ table.library img.thumb {
   color: #999;
   text-transform: none;
 }
+
+/* sentinel that triggers loading the next batch of library rows */
+.table-sentinel {
+  height: 1px;
+}
+
+.table-sentinel[hidden] { display: none; }
