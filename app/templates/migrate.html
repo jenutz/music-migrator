@@ -17,7 +17,10 @@
 >
   <aside class="track-list">
     <header class="track-list-head">
-      <h3>{{ src_name }}</h3>
+      <h3>
+        <span>{{ src_name }}</span>
+        <span class="badge" id="track-count">0</span>
+      </h3>
       <div class="progress"><span id="progress-bar"></span></div>
       <p style="margin:0;font-size:.8em;color:#777" id="progress-text">Загрузка…</p>
       <div class="legend">

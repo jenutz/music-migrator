@@ -105,8 +105,10 @@ async function renderLibrary(service, serviceName) {
 
 function setState(row, connected, imported) {
   const state = $(".service-state", row);
-  state.textContent = connected ? "подключён" : "нет токена";
+  state.innerHTML = `<span class="dot"></span>${connected ? "подключён" : "нет токена"}`;
   state.classList.toggle("ok", connected);
+
+  row.dataset.imported = String(imported || 0);
 
   const placeholder = $(".placeholder-text", row);
   placeholder.textContent = imported
@@ -144,7 +146,7 @@ for (const row of $$(".service-row")) {
       await api(`/api/token/${service}`, { method: "POST", body: JSON.stringify({ value }) });
       textarea.value = "";
       box.classList.remove("open");
-      setState(row, true, Number($(".placeholder-text", row).dataset.imported || 0));
+      setState(row, true, Number(row.dataset.imported || 0));
       toast("Токен сохранён", "ok");
     } catch (error) {
       toast(error.message, "err");

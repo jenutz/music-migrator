@@ -70,12 +70,30 @@ html, body {
 }
 
 .service-state {
-  font-size: 0.75em;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72em;
   color: #888;
   white-space: nowrap;
+  background: #f1f3f5;
+  border-radius: 99px;
+  padding: 2px 9px;
 }
 
-.service-state.ok { color: #2e7d32; }
+.service-state .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #adb5bd;
+}
+
+.service-state.ok {
+  color: #2e7d32;
+  background: #e8f5e9;
+}
+
+.service-state.ok .dot { background: #4caf50; }
 
 .buttons {
   display: flex;
@@ -461,3 +479,81 @@ kbd { background: #e9ecef; border-radius: 4px; padding: 0 4px; font-size: 0.9em;
   .track-list { max-height: 300px; }
   .candidates { max-height: none; }
 }
+
+/* --- polish ----------------------------------------------------------- */
+
+/* zebra rows keep long libraries readable */
+table.library tbody tr:nth-child(even) { background: #fbfcfd; }
+table.library tbody tr:nth-child(even):hover { background: #f8f9fa; }
+table.library th:first-child,
+table.library td:first-child { width: 42px; color: #999; }
+
+/* the apply bar should stay reachable while scrolling a long library */
+.apply-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
+
+/* animate the toast + chips instead of popping in */
+.toast { animation: toast-in 0.18s ease-out; }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* small "open in service" affordance on tracks and candidates */
+.open-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: #888;
+  text-decoration: none;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.open-link:hover { background: #e9ecef; color: #007bff; }
+
+.candidates li .open-link { opacity: 0; transition: opacity 0.15s; }
+.candidates li:hover .open-link { opacity: 1; }
+
+/* track counter next to the sidebar title */
+.track-list-head h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+/* thumbs get a soft edge so missing covers are less jarring */
+.track-card img,
+.candidates img,
+table.library img.thumb {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* empty states shouldn't look like a rendering bug */
+.empty {
+  background: #fff;
+  border: 1px dashed #d6dadd;
+  border-radius: 12px;
+  color: #888;
+  padding: 28px;
+}
+
+/* thin scrollbars inside the scrollable panes */
+.track-items::-webkit-scrollbar,
+.candidates::-webkit-scrollbar { width: 8px; }
+.track-items::-webkit-scrollbar-thumb,
+.candidates::-webkit-scrollbar-thumb {
+  background: #d6dadd;
+  border-radius: 99px;
+}
+
+/* push the source "open in service" link to the far right of the card */
+.track-card .open-link { margin-left: auto; }

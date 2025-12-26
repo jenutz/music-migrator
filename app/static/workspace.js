@@ -6,6 +6,12 @@ if (workspace) {
   const dst = workspace.dataset.dst;
   const dstName = workspace.dataset.dstName;
 
+  const TRACK_URL = {
+    yandex: (id) => `https://music.yandex.ru/track/${id}`,
+    youtube: (id) => `https://music.youtube.com/watch?v=${id}`,
+  };
+  const trackLink = (service, id) => (TRACK_URL[service] ? TRACK_URL[service](id) : "#");
+
   const state = {
     tracks: [],
     counts: { total: 0, chosen: 0, applied: 0, skipped: 0 },
@@ -45,6 +51,9 @@ if (workspace) {
     els.progressText.textContent = total
       ? `разобрано ${reviewed} из ${total} · пролайкано ${applied}`
       : "медиатека не загружена";
+
+    const counter = $("#track-count");
+    if (counter) counter.textContent = total;
 
     els.applyChosen.textContent = chosen;
     els.applyApplied.textContent = applied;
@@ -106,6 +115,8 @@ if (workspace) {
         <p>${formatDuration(track.src_duration_s)}</p>
         ${note}
       </div>
+      <a class="open-link" href="${trackLink(src, track.src_external_id)}"
+         target="_blank" rel="noopener" title="Открыть в исходном сервисе">↗</a>
     `;
   }
 
@@ -135,6 +146,16 @@ if (workspace) {
         <span style="color:#888">${formatDuration(candidate.duration_s)}</span>
         <span class="score ${scoreClass(candidate.score ?? 0)}">${candidate.score ?? 0}</span>
       `;
+      const link = document.createElement("a");
+      link.className = "open-link";
+      link.href = trackLink(dst, candidate.external_id);
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.title = "Открыть в сервисе назначения";
+      link.textContent = "↗";
+      link.addEventListener("click", (event) => event.stopPropagation());
+      li.appendChild(link);
+
       li.addEventListener("click", () => choose(candidate));
       els.candidates.appendChild(li);
     });

@@ -18,12 +18,12 @@
 
     {% for sid in services %}
     {% set st = statuses[sid] %}
-    <div class="service-row" data-service="{{ sid }}" data-fullname="{{ fullname[sid] }}">
+    <div class="service-row" data-service="{{ sid }}" data-fullname="{{ fullname[sid] }}" data-imported="{{ st.imported }}">
       <div class="service-header">
         <img class="service-icon" src="{{ url_for('static', path=sid ~ '_icon.svg') }}?v={{ time }}" alt="{{ sid }}">
         <div class="service-name">{{ fullname[sid] }}</div>
         <div class="service-state {% if st.has_token %}ok{% endif %}">
-          {% if st.has_token %}подключён{% else %}нет токена{% endif %}
+          <span class="dot"></span>{% if st.has_token %}подключён{% else %}нет токена{% endif %}
         </div>
       </div>
 
