@@ -1,4 +1,4 @@
-"""Candidate search + similarity scoring between a source and a destination service."""
+"""Candidate search + similarity scoring, scoped to one target playlist."""
 
 import difflib
 import logging
@@ -57,10 +57,19 @@ def score_track(source: dict, candidate: dict) -> int:
 
 
 class MatchService:
-    """Finds candidates for a source track and records the user's choice."""
+    """Works on one target playlist: search, choose, skip."""
 
-    def __init__(self, dst_service: str):
-        self.dst_service = dst_service
+    def __init__(self, dst_playlist_id: int):
+        playlist = db.get_playlist(dst_playlist_id)
+        if not playlist:
+            raise ValueError(f"Unknown playlist {dst_playlist_id}")
+        if not playlist["source_playlist_id"]:
+            raise ValueError(f"Playlist {dst_playlist_id} is not a migration target")
+
+        self.playlist = playlist
+        self.playlist_id = int(playlist["id"])
+        self.dst_service = playlist["service"]
+        self.src_playlist_id = int(playlist["source_playlist_id"])
 
     # --- candidates ------------------------------------------------------
 
@@ -98,8 +107,8 @@ class MatchService:
             raise ValueError("Candidate has no external id")
 
         db.save_match(
+            dst_playlist_id=self.playlist_id,
             src_track_id=src_track_id,
-            dst_service=self.dst_service,
             track=candidate,
             score=candidate.get("score"),
         )
@@ -113,11 +122,11 @@ class MatchService:
         raise ValueError(f"Candidate {external_id} not found for track {src_track_id}")
 
     def skip(self, src_track_id: int) -> dict:
-        db.skip_match(src_track_id, self.dst_service)
+        db.skip_match(self.playlist_id, src_track_id)
         return {"src_track_id": src_track_id, "status": "skipped"}
 
     def build_target(self, src_track_id: int) -> dict:
         """Attach the stored match to a source track, for rendering."""
         source = db.get_track(src_track_id)
-        match = db.get_match(src_track_id, self.dst_service)
+        match = db.get_match(self.playlist_id, src_track_id)
         return {"source": dict(source) if source else None, "match": dict(match) if match else None}

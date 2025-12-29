@@ -1,10 +1,12 @@
 """Music library migrator.
 
-Single-user app: import the liked library from one service, review each track
-against search results on the other service, then like the chosen tracks.
+Single-user app. Import a service's liked library into a playlist, review it
+against the other service, then like the chosen tracks. Playlists are the unit
+of work: every import creates one, every export creates a target one.
 """
 
 import logging
+import sqlite3
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,7 +19,13 @@ from pydantic import BaseModel
 
 from app import db
 from app.integrations import FULL_NAME, MusicService, reset_cache
-from app.services import ApplyService, ImportService, MatchService, yandex_auth
+from app.services import (
+    ApplyService,
+    ImportService,
+    MatchService,
+    create_target_playlist,
+    yandex_auth,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -47,11 +55,35 @@ def _service(value: str) -> MusicService:
         raise HTTPException(404, f"Unknown service: {value}")
 
 
-def _pair(src: str, dst: str) -> tuple[MusicService, MusicService]:
-    source, dest = _service(src), _service(dst)
-    if source is dest:
-        raise HTTPException(400, "Source and destination must differ")
-    return source, dest
+def _playlist(playlist_id: int) -> sqlite3.Row:
+    playlist = db.get_playlist(playlist_id)
+    if not playlist:
+        raise HTTPException(404, f"Unknown playlist {playlist_id}")
+    return playlist
+
+
+def _target_playlist(playlist_id: int) -> sqlite3.Row:
+    playlist = _playlist(playlist_id)
+    if not playlist["source_playlist_id"]:
+        raise HTTPException(400, "Этот плейлист не является целью переноса")
+    return playlist
+
+
+def _playlist_payload(playlist: sqlite3.Row) -> dict:
+    counts = db.playlist_counts(playlist)
+    source = db.get_playlist(playlist["source_playlist_id"]) if playlist["source_playlist_id"] else None
+    return {
+        "id": playlist["id"],
+        "service": playlist["service"],
+        "service_name": FULL_NAME.get(playlist["service"], playlist["service"]),
+        "name": playlist["name"],
+        "created_at": playlist["created_at"],
+        "kind": db.playlist_kind(playlist),
+        "source_playlist_id": playlist["source_playlist_id"],
+        "source_name": source["name"] if source else None,
+        "source_service": source["service"] if source else None,
+        **counts,
+    }
 
 
 # Short instructions shown under the token field, per service.
@@ -107,17 +139,21 @@ def index(request: Request):
     return templates.TemplateResponse(request, "index.html", context)
 
 
-@app.get("/migrate/{src}/{dst}", response_class=HTMLResponse)
-def migrate_page(request: Request, src: str, dst: str):
-    source, dest = _pair(src, dst)
+@app.get("/migrate/{playlist_id}", response_class=HTMLResponse)
+def migrate_page(request: Request, playlist_id: int):
+    playlist = _target_playlist(playlist_id)
+    source = _playlist(playlist["source_playlist_id"])
+
     context = dashboard_context()
     context.update(
         {
             "time": int(time.time()),
-            "src": source.value,
-            "dst": dest.value,
-            "src_name": FULL_NAME[source.value],
-            "dst_name": FULL_NAME[dest.value],
+            "playlist": playlist,
+            "playlist_id": playlist_id,
+            "src_service": source["service"],
+            "dst_service": playlist["service"],
+            "src_name": FULL_NAME[source["service"]],
+            "dst_name": FULL_NAME[playlist["service"]],
         }
     )
     return templates.TemplateResponse(request, "migrate.html", context)
@@ -191,51 +227,84 @@ def import_library(service: str):
         logger.exception("Import failed for %s", svc.value)
         raise _explain(exc, svc.value)
 
-    result.update(ImportService.status(svc.value))
+    playlist = db.get_playlist(result["playlist_id"])
+    result["playlist"] = _playlist_payload(playlist)
+    return result
+
+
+# --- playlists ------------------------------------------------------------
+
+
+@app.get("/api/playlists")
+def playlists():
+    return {"playlists": [_playlist_payload(p) for p in db.list_playlists()]}
+
+
+@app.get("/api/playlist/{playlist_id}")
+def playlist_detail(playlist_id: int):
+    """Everything a playlist view needs: its tracks, or its match table."""
+    playlist = _playlist(playlist_id)
+    payload = _playlist_payload(playlist)
+
+    if payload["kind"] == "imported":
+        tracks = [dict(row) for row in db.playlist_tracks(playlist_id)]
+    else:
+        tracks = [
+            dict(row)
+            for row in db.ordered_matches(playlist["source_playlist_id"], playlist_id)
+        ]
+
+    return {"playlist": payload, "tracks": tracks}
+
+
+@app.delete("/api/playlist/{playlist_id}")
+def delete_playlist(playlist_id: int):
+    _playlist(playlist_id)
+    db.delete_playlist(playlist_id)
+    return {"deleted": playlist_id}
+
+
+class ExportPayload(BaseModel):
+    dst_service: str
+
+
+@app.post("/api/export/{playlist_id}")
+def export_playlist(playlist_id: int, payload: ExportPayload):
+    try:
+        result = create_target_playlist(playlist_id, payload.dst_service)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    playlist = db.get_playlist(result["playlist_id"])
+    result["playlist"] = _playlist_payload(playlist)
     return result
 
 
 # --- matching -------------------------------------------------------------
 
 
-@app.get("/api/library/{service}")
-def library(service: str):
-    """Whole imported library of one service, in playlist order (table view)."""
-    svc = _service(service)
-    playlist = db.get_liked_playlist(svc.value)
-    if not playlist:
-        return {"service": svc.value, "tracks": []}
-
-    rows = db.get_playlist_tracks(playlist["id"])
-    return {"service": svc.value, "tracks": [dict(row) for row in rows]}
-
-
 @app.get("/api/tracks")
-def tracks(src: str, dst: str):
-    source, dest = _pair(src, dst)
-    playlist = db.get_liked_playlist(source.value)
-    if not playlist:
-        return {"tracks": [], "counts": db.match_counts(0, dest.value), "playlist_id": None}
-
-    rows = db.ordered_matches(playlist["id"], dest.value)
-    counts = db.match_counts(playlist["id"], dest.value)
+def tracks(playlist_id: int):
+    playlist = _target_playlist(playlist_id)
+    rows = db.ordered_matches(playlist["source_playlist_id"], playlist_id)
+    counts = db.match_counts(playlist["source_playlist_id"], playlist_id)
     return {
-        "playlist_id": playlist["id"],
+        "playlist": _playlist_payload(playlist),
         "counts": counts,
         "tracks": [dict(row) for row in rows],
     }
 
 
 @app.get("/api/candidates/{src_track_id}")
-def candidates(src_track_id: int, dst: str, refresh: bool = False, query: str | None = None):
-    _service(dst)
+def candidates(src_track_id: int, playlist_id: int, refresh: bool = False, query: str | None = None):
     try:
-        return {"candidates": MatchService(dst).candidates(src_track_id, refresh=refresh, query=query)}
+        service = MatchService(playlist_id)
+        return {"candidates": service.candidates(src_track_id, refresh=refresh, query=query)}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
         logger.exception("Search failed")
-        raise _explain(exc, dst)
+        raise _explain(exc, _playlist(playlist_id)["service"])
 
 
 class ChoosePayload(BaseModel):
@@ -243,39 +312,41 @@ class ChoosePayload(BaseModel):
 
 
 @app.post("/api/choose/{src_track_id}")
-def choose(src_track_id: int, dst: str, payload: ChoosePayload):
-    _service(dst)
+def choose(src_track_id: int, playlist_id: int, payload: ChoosePayload):
     try:
-        return MatchService(dst).choose_by_id(src_track_id, payload.external_id)
+        return MatchService(playlist_id).choose_by_id(src_track_id, payload.external_id)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
 
 @app.post("/api/skip/{src_track_id}")
-def skip(src_track_id: int, dst: str):
-    _service(dst)
-    return MatchService(dst).skip(src_track_id)
+def skip(src_track_id: int, playlist_id: int):
+    try:
+        return MatchService(playlist_id).skip(src_track_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 # --- apply ----------------------------------------------------------------
 
 
 @app.get("/api/apply/stats")
-def apply_stats(src: str, dst: str):
-    source, dest = _pair(src, dst)
-    return ApplyService(dest.value, source.value).stats()
+def apply_stats(playlist_id: int):
+    try:
+        return ApplyService(playlist_id).stats()
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 
 @app.post("/api/apply")
-def apply(src: str, dst: str, limit: int = 50):
-    source, dest = _pair(src, dst)
+def apply(playlist_id: int, limit: int = 50):
     try:
-        return ApplyService(dest.value, source.value).apply(limit=limit)
+        return ApplyService(playlist_id).apply(limit=limit)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
         logger.exception("Apply failed")
-        raise _explain(exc, dest.value)
+        raise _explain(exc, _playlist(playlist_id)["service"])
 
 
 @app.get("/health")

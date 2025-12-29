@@ -7,31 +7,148 @@ const TRACK_URL = {
 
 const main = $("#main-content");
 
-// --- shared views ---------------------------------------------------------
+// --- helpers --------------------------------------------------------------
+
+function formatWhen(iso) {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso || "";
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`
+    + ` ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Covers are stored at 200x200; ask the service for something near the size we
+// actually paint so a long library does not fetch full-size images.
+function thumbUrl(url, size = "100x100") {
+  if (!url) return "";
+  return /\/\d+x\d+$/.test(url) ? url.replace(/\/\d+x\d+$/, `/${size}`) : url;
+}
+
+function playlistSubtitle(playlist) {
+  if (playlist.kind === "imported") {
+    return `${playlist.total} треков`;
+  }
+
+  const parts = [`пролайкано ${playlist.applied} из ${playlist.total}`];
+  if (playlist.chosen) parts.push(`выбрано ${playlist.chosen}`);
+  if (playlist.total && playlist.applied >= playlist.total) parts.unshift("готово");
+  return parts.join(" · ");
+}
+
+// --- playlist list --------------------------------------------------------
+
+let playlists = [];
+
+function playlistRowHtml(playlist) {
+  const target = playlist.kind === "target";
+  const source = playlist.source_name && playlist.source_service
+    ? `<span class="playlist-source">← ${escapeHtml(playlist.source_service === "yandex" ? "Yandex Music" : "YouTube Music")}</span>`
+    : "";
+
+  return `
+    <li class="playlist-row${target ? " target" : ""}" data-id="${playlist.id}" data-kind="${playlist.kind}">
+      <div class="playlist-meta">
+        <span class="playlist-name">${formatWhen(playlist.created_at)}</span>
+        <span class="playlist-sub">${escapeHtml(playlistSubtitle(playlist))} ${source}</span>
+      </div>
+      <div class="playlist-actions">
+        ${target
+          ? `<button data-act="open" title="Продолжить сопоставление">Продолжить</button>`
+          : `<button data-act="export" title="Создать плейлист в другом сервисе">Экспорт</button>`}
+        <button data-act="view" class="secondary" title="Показать треки">Просмотр</button>
+        <button data-act="delete" class="danger" title="Удалить плейлист">×</button>
+      </div>
+    </li>
+  `;
+}
+
+function renderPlaylists(data) {
+  playlists = data;
+
+  for (const list of $$(".playlist-list")) {
+    const service = list.dataset.service;
+    const mine = data.filter((playlist) => playlist.service === service);
+
+    list.innerHTML = mine.length
+      ? mine.map(playlistRowHtml).join("")
+      : `<li class="playlist-empty">плейлистов пока нет</li>`;
+
+    for (const row of $$(".playlist-row", list)) {
+      const id = Number(row.dataset.id);
+      const playlist = mine.find((item) => item.id === id);
+
+      $('[data-act="open"]', row)?.addEventListener("click", () => {
+        location.href = `/migrate/${id}`;
+      });
+      $('[data-act="export"]', row)?.addEventListener("click", () => renderChooser(playlist));
+      $('[data-act="view"]', row)?.addEventListener("click", () => renderPlaylistView(id));
+      $('[data-act="delete"]', row)?.addEventListener("click", () => removePlaylist(playlist));
+    }
+  }
+}
+
+async function refreshPlaylists() {
+  try {
+    const data = await api("/api/playlists");
+    renderPlaylists(data.playlists);
+  } catch (error) {
+    toast(error.message, "err");
+  }
+}
+
+async function removePlaylist(playlist) {
+  const label = formatWhen(playlist.created_at);
+  if (!confirm(`Удалить плейлист ${label}?`)) return;
+
+  try {
+    await api(`/api/playlist/${playlist.id}`, { method: "DELETE" });
+    toast("Плейлист удалён", "ok");
+    await refreshPlaylists();
+
+    // the open workspace belonged to it, go home
+    if ($("#workspace")?.dataset.playlist === String(playlist.id)) location.href = "/";
+    else if (main.dataset.playlist === String(playlist.id)) location.href = "/";
+  } catch (error) {
+    toast(error.message, "err");
+  }
+}
+
+// --- views ----------------------------------------------------------------
+
+function clearView() {
+  delete main.dataset.view;
+  delete main.dataset.playlist;
+}
 
 function showWelcome() {
   location.href = "/";
 }
 
-function renderChooser(sourceService, sourceName) {
-  delete main.dataset.view;
+function renderChooser(sourcePlaylist) {
+  clearView();
   const others = $$(".service-row")
     .map((row) => row.dataset.service)
-    .filter((svc) => svc !== sourceService);
+    .filter((service) => service !== sourcePlaylist.service);
 
   main.innerHTML = `
     <div class="main-header">
-      <h2>Экспорт из ${escapeHtml(sourceName)}</h2>
-      <span class="muted">выберите сервис назначения</span>
+      <h2>Экспорт плейлиста</h2>
+      <span class="muted">${formatWhen(sourcePlaylist.created_at)} · ${sourcePlaylist.total} треков</span>
     </div>
     <div class="panel">
+      <p style="margin-top:0;color:#555">
+        Будет создан новый плейлист в выбранном сервисе. Выборы сохраняются в нём,
+        исходный плейлист остаётся нетронутым.
+      </p>
       <div class="services-row">
         ${others.map((sid) => {
           const row = $(`.service-row[data-service="${sid}"]`);
           const name = row?.dataset.fullname || sid;
-          return `<button class="service-pick" data-dst="${sid}">
+          const ready = !$(".load-btn", row)?.disabled;
+          return `<button class="service-pick" data-dst="${sid}" ${ready ? "" : "disabled"}>
             <img src="/static/${sid}_icon.svg" alt="${sid}">
             <span>${escapeHtml(name)}</span>
+            ${ready ? "" : '<small style="color:#999">нет токена</small>'}
           </button>`;
         }).join("")}
       </div>
@@ -39,23 +156,28 @@ function renderChooser(sourceService, sourceName) {
   `;
 
   $$(".service-pick", main).forEach((btn) => {
-    btn.addEventListener("click", () => {
-      location.href = `/migrate/${sourceService}/${btn.dataset.dst}`;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        const result = await api(`/api/export/${sourcePlaylist.id}`, {
+          method: "POST",
+          body: JSON.stringify({ dst_service: btn.dataset.dst }),
+        });
+        await refreshPlaylists();
+        location.href = `/migrate/${result.playlist_id}`;
+      } catch (error) {
+        toast(error.message, "err");
+        btn.disabled = false;
+      }
     });
   });
 }
 
-// Thumbnails are stored at 200x200 and the table shows them at 48px. Yandex
-// puts the size in the last path segment, so ask for something close to the
-// display size (2x for retina) instead of scaling 200px down in the browser.
-function thumbUrl(url, size = "100x100") {
-  if (!url) return "";
-  return /\/\d+x\d+$/.test(url) ? url.replace(/\/\d+x\d+$/, `/${size}`) : url;
-}
+// --- library table --------------------------------------------------------
 
 const collator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
 
-const LIBRARY_COLUMNS = [
+const IMPORTED_COLUMNS = [
   { key: "position", label: "#", numeric: true },
   { key: null, label: "" },
   { key: "title", label: "Название" },
@@ -65,26 +187,37 @@ const LIBRARY_COLUMNS = [
   { key: "external_id", label: "ID", numeric: true },
 ];
 
-function sortTracks(tracks, key, direction) {
-  const rows = tracks.slice();
+const TARGET_COLUMNS = [
+  { key: "position", label: "#", numeric: true },
+  { key: null, label: "" },
+  { key: "src_title", label: "Было" },
+  { key: "dst_title", label: "Стало" },
+  { key: "score", label: "Совпадение", numeric: true },
+  { key: "status", label: "Статус" },
+];
 
-  // No column selected keeps the imported playlist order.
-  if (!key) return rows.sort((a, b) => a.position - b.position);
+const STATUS_LABEL = {
+  chosen: "выбрано",
+  applied: "пролайкано",
+  skipped: "пропущено",
+};
+
+function sortRows(rows, key, direction) {
+  const sorted = rows.slice();
+  if (!key) return sorted.sort((a, b) => a.position - b.position);
 
   const factor = direction === "desc" ? -1 : 1;
 
-  return rows.sort((a, b) => {
+  return sorted.sort((a, b) => {
     const left = a[key];
     const right = b[key];
     const leftEmpty = left === null || left === undefined || left === "";
     const rightEmpty = right === null || right === undefined || right === "";
 
-    // Missing values stay at the bottom in both directions.
     if (leftEmpty || rightEmpty) {
       if (leftEmpty && rightEmpty) return 0;
       return leftEmpty ? 1 : -1;
     }
-
     if (typeof left === "number" && typeof right === "number") {
       return (left - right) * factor;
     }
@@ -92,99 +225,77 @@ function sortTracks(tracks, key, direction) {
   });
 }
 
-async function renderLibrary(service, serviceName) {
-  main.dataset.view = "library";
-  main.innerHTML = `
-    <div class="main-header">
-      <h2>${escapeHtml(serviceName)}</h2>
-      <span class="muted" id="library-count">загрузка…</span>
-    </div>
-    <div class="panel"><p class="empty">Загружаем треки…</p></div>
-  `;
-
-  let data;
-  try {
-    data = await api(`/api/library/${service}`);
-  } catch (error) {
-    main.innerHTML = `<div class="panel empty">${escapeHtml(error.message)}</div>`;
-    return;
-  }
-
-  if (!data.tracks.length) {
-    main.innerHTML = `
-      <div class="main-header"><h2>${escapeHtml(serviceName)}</h2></div>
-      <div class="panel empty">Медиатека пуста — нажмите «Загрузить».</div>
-    `;
-    return;
-  }
-
+function cellHtml(row, key, service) {
   const link = TRACK_URL[service] || (() => "#");
-  const sort = { key: null, direction: "asc" };
 
-  main.innerHTML = `
-    <div class="main-header">
-      <h2>${escapeHtml(serviceName)}</h2>
-      <span class="muted" id="library-count"></span>
-    </div>
+  switch (key) {
+    case "position":
+      return `<td class="idx">${row.position + 1}</td>`;
+    case null: {
+      const cover = row.dst_thumbnail || row.thumbnail;
+      return `<td class="cover">${cover
+        ? `<img class="thumb" src="${thumbUrl(cover)}" alt="" loading="lazy" decoding="async" width="48" height="48">`
+        : ""}</td>`;
+    }
+    case "duration_s":
+      return `<td class="num">${formatDuration(row.duration_s)}</td>`;
+    case "external_id":
+      return `<td class="mono"><a href="${link(row.external_id)}" target="_blank" rel="noopener">${escapeHtml(row.external_id)}</a></td>`;
+    case "src_title":
+      return `<td>${escapeHtml(row.src_title || "")}<div class="sub">${escapeHtml(row.src_artists || "")}</div></td>`;
+    case "dst_title":
+      return row.dst_title
+        ? `<td>${escapeHtml(row.dst_title)}<div class="sub">${escapeHtml(row.dst_artists || "")}</div></td>`
+        : `<td class="muted-cell">—</td>`;
+    case "score":
+      return `<td class="num">${row.score ?? "—"}</td>`;
+    case "status":
+      return `<td>${row.status ? `<span class="status-pill ${row.status}">${STATUS_LABEL[row.status] || row.status}</span>` : '<span class="muted-cell">не разобрано</span>'}</td>`;
+    default:
+      return `<td>${escapeHtml(row[key] ?? "")}</td>`;
+  }
+}
+
+function renderTable(container, { columns, rows, service }) {
+  const sort = { key: null, direction: "asc" };
+  const PAGE = 80;
+
+  container.innerHTML = `
     <div class="panel table-panel">
-      <div class="table-scroll" id="table-scroll">
+      <div class="table-scroll">
         <table class="library">
           <thead>
             <tr>
-              ${LIBRARY_COLUMNS.map((column) => column.key
+              ${columns.map((column) => column.key
                 ? `<th data-sort="${column.key}" title="Сортировать">${column.label}<span class="arrow"></span></th>`
                 : `<th>${column.label}</th>`).join("")}
             </tr>
           </thead>
           <tbody></tbody>
         </table>
-        <div class="table-sentinel" id="table-sentinel"></div>
+        <div class="table-sentinel"></div>
       </div>
     </div>
   `;
 
-  const scroller = $("#table-scroll", main);
-  const tbody = $("tbody", main);
-  const sentinel = $("#table-sentinel", main);
-  const counter = $("#library-count", main);
+  const scroller = $(".table-scroll", container);
+  const tbody = $("tbody", container);
+  const sentinel = $(".table-sentinel", container);
 
-  // 1877 rows × a cover each is a lot of DOM for one paint, so rows are
-  // appended in batches as the user scrolls near the bottom.
-  const PAGE = 80;
-  let rows = [];
+  let sorted = [];
   let rendered = 0;
   let observer = null;
 
-  const rowHtml = (track) => `
-    <tr>
-      <td class="idx">${track.position + 1}</td>
-      <td class="cover">${track.thumbnail
-        ? `<img class="thumb" src="${thumbUrl(track.thumbnail)}" alt=""
-                loading="lazy" decoding="async" width="48" height="48">`
-        : ""}</td>
-      <td>${escapeHtml(track.title)}</td>
-      <td>${escapeHtml(track.artists || "")}</td>
-      <td>${escapeHtml(track.album || "")}</td>
-      <td class="num">${formatDuration(track.duration_s)}</td>
-      <td class="mono"><a href="${link(track.external_id)}" target="_blank" rel="noopener">${escapeHtml(track.external_id)}</a></td>
-    </tr>
-  `;
-
-  const renderFooterCount = () => {
-    counter.textContent = rendered < rows.length
-      ? `${rendered} из ${rows.length} треков`
-      : `${rows.length} треков`;
-  };
-
   const appendPage = () => {
-    const next = rows.slice(rendered, rendered + PAGE);
+    const next = sorted.slice(rendered, rendered + PAGE);
     if (!next.length) return;
 
-    tbody.insertAdjacentHTML("beforeend", next.map(rowHtml).join(""));
+    tbody.insertAdjacentHTML("beforeend", next.map((row) => `
+      <tr>${columns.map((column) => cellHtml(row, column.key, service)).join("")}</tr>
+    `).join(""));
     rendered += next.length;
-    renderFooterCount();
 
-    if (rendered >= rows.length) stopObserving();
+    if (rendered >= sorted.length) stopObserving();
   };
 
   const stopObserving = () => {
@@ -195,14 +306,11 @@ async function renderLibrary(service, serviceName) {
 
   const startObserving = () => {
     sentinel.hidden = false;
-
     if (!("IntersectionObserver" in window)) {
-      // No observer: just put everything on the page.
-      while (rendered < rows.length) appendPage();
+      while (rendered < sorted.length) appendPage();
       stopObserving();
       return;
     }
-
     if (observer) observer.disconnect();
     observer = new IntersectionObserver((entries) => {
       if (entries.some((entry) => entry.isIntersecting)) appendPage();
@@ -211,7 +319,7 @@ async function renderLibrary(service, serviceName) {
   };
 
   const rebuild = () => {
-    rows = sortTracks(data.tracks, sort.key, sort.direction);
+    sorted = sortRows(rows, sort.key, sort.direction);
     rendered = 0;
     tbody.innerHTML = "";
     scroller.scrollTop = 0;
@@ -220,7 +328,7 @@ async function renderLibrary(service, serviceName) {
   };
 
   const renderHeader = () => {
-    for (const th of $$("th[data-sort]", main)) {
+    for (const th of $$("th[data-sort]", container)) {
       const active = th.dataset.sort === sort.key;
       th.classList.toggle("sorted", active);
       th.classList.toggle("desc", active && sort.direction === "desc");
@@ -228,7 +336,7 @@ async function renderLibrary(service, serviceName) {
     }
   };
 
-  $$("th[data-sort]", main).forEach((th) => {
+  $$("th[data-sort]", container).forEach((th) => {
     th.addEventListener("click", () => {
       const key = th.dataset.sort;
       if (sort.key === key) {
@@ -246,23 +354,68 @@ async function renderLibrary(service, serviceName) {
   rebuild();
 }
 
+async function renderPlaylistView(playlistId) {
+  clearView();
+  main.dataset.view = "library";
+  main.dataset.playlist = String(playlistId);
+
+  main.innerHTML = `
+    <div class="main-header"><h2>Загрузка…</h2></div>
+    <div class="panel"><p class="empty">Загружаем треки…</p></div>
+  `;
+
+  let data;
+  try {
+    data = await api(`/api/playlist/${playlistId}`);
+  } catch (error) {
+    main.innerHTML = `<div class="panel empty">${escapeHtml(error.message)}</div>`;
+    return;
+  }
+
+  const { playlist, tracks } = data;
+  const isTarget = playlist.kind === "target";
+
+  const title = `${playlist.service_name} · ${formatWhen(playlist.created_at)}`;
+  const subtitle = isTarget
+    ? `${playlist.source_name} → пролайкано ${playlist.applied} из ${playlist.total}`
+    : `${tracks.length} треков`;
+
+  if (!tracks.length) {
+    main.innerHTML = `
+      <div class="main-header">
+        <h2>${escapeHtml(title)}</h2>
+        <span class="muted">${escapeHtml(subtitle)}</span>
+      </div>
+      <div class="panel empty">Плейлист пуст.</div>
+    `;
+    return;
+  }
+
+  const body = document.createElement("div");
+  body.className = "table-host";
+
+  main.innerHTML = `
+    <div class="main-header">
+      <h2>${escapeHtml(title)}</h2>
+      <span class="muted">${escapeHtml(subtitle)}</span>
+    </div>
+  `;
+  main.appendChild(body);
+
+  renderTable(body, {
+    columns: isTarget ? TARGET_COLUMNS : IMPORTED_COLUMNS,
+    rows: tracks,
+    service: playlist.service,
+  });
+}
+
 // --- sidebar wiring -------------------------------------------------------
 
-function setState(row, connected, imported) {
+function setConnected(row, connected) {
   const state = $(".service-state", row);
   state.innerHTML = `<span class="dot"></span>${connected ? "подключён" : "нет токена"}`;
   state.classList.toggle("ok", connected);
-
-  row.dataset.imported = String(imported || 0);
-
-  const placeholder = $(".placeholder-text", row);
-  placeholder.textContent = imported
-    ? `Загружено треков: ${imported}`
-    : "Медиатека ещё не загружена";
-
   $(".load-btn", row).disabled = !connected;
-  $(".view-btn", row).disabled = !imported;
-  $(".export-btn", row).disabled = !imported;
 }
 
 // --- yandex device flow ---------------------------------------------------
@@ -299,7 +452,7 @@ function wireDeviceAuth(row, box) {
     panel.hidden = true;
     button.disabled = false;
     box.classList.remove("open");
-    setState(row, true, Number(row.dataset.imported || 0));
+    setConnected(row, true);
     toast("Яндекс подключён", "ok");
   };
 
@@ -358,9 +511,10 @@ function wireDeviceAuth(row, box) {
   });
 }
 
+// --- service rows ---------------------------------------------------------
+
 for (const row of $$(".service-row")) {
   const service = row.dataset.service;
-  const fullname = row.dataset.fullname;
   const box = $(".token-box", row);
   const textarea = $("textarea", box);
 
@@ -386,7 +540,7 @@ for (const row of $$(".service-row")) {
       await api(`/api/token/${service}`, { method: "POST", body: JSON.stringify({ value }) });
       textarea.value = "";
       box.classList.remove("open");
-      setState(row, true, Number(row.dataset.imported || 0));
+      setConnected(row, true);
       toast("Токен сохранён", "ok");
     } catch (error) {
       toast(error.message, "err");
@@ -398,28 +552,28 @@ for (const row of $$(".service-row")) {
   $(".load-btn", row).addEventListener("click", async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
-    const placeholder = $(".placeholder-text", row);
-    placeholder.textContent = "Загружаем медиатеку…";
+    button.textContent = "Загружаем…";
 
     try {
       const result = await api(`/api/import/${service}`, { method: "POST" });
-      setState(row, true, result.imported);
       toast(`Загружено треков: ${result.imported}`, "ok");
+      await refreshPlaylists();
+      renderPlaylistView(result.playlist_id);
     } catch (error) {
-      placeholder.textContent = error.message;
       toast(error.message, "err");
     } finally {
       button.disabled = false;
+      button.textContent = "Загрузить";
     }
   });
-
-  $(".view-btn", row).addEventListener("click", () => renderLibrary(service, fullname));
-  $(".export-btn", row).addEventListener("click", () => renderChooser(service, fullname));
 }
 
+refreshPlaylists();
+
+// the workspace refreshes the counters after it likes a batch
+document.addEventListener("playlists:changed", refreshPlaylists);
+
 // the migrate page ships its own workspace script; don't clobber it
-if ($("#workspace")) {
-  // sidebar handlers above are already attached; nothing else to do
-} else {
+if (!$("#workspace")) {
   main.dataset.ready = "true";
 }

@@ -1,6 +1,6 @@
 """Storage layer tests.
 
-These check behaviour the app relies on (ordering, dedup, state transitions),
+These check behaviour the app relies on (ordering, scoping, state transitions),
 not that sqlite echoes back what we just wrote.
 """
 
@@ -36,113 +36,152 @@ def test_playlist_order_survives_import(track_factory):
     titles = ["Blue Monday", "Enjoy the Silence", "Sweet Dreams"]
     tracks = [track_factory(title=t, artists="X") for t in titles]
 
-    playlist_id = db.replace_liked_playlist("yandex", "Liked tracks", tracks)
-    rows = db.get_playlist_tracks(playlist_id)
+    playlist_id = db.create_playlist("yandex", "Медиатека", tracks)
+    rows = db.playlist_tracks(playlist_id)
 
     assert [row["title"] for row in rows] == titles
     assert [row["position"] for row in rows] == [0, 1, 2]
 
 
-def test_reimport_replaces_previous_library(track_factory):
-    db.replace_liked_playlist("yandex", "Liked tracks", [track_factory(title="A")])
-    playlist_id = db.replace_liked_playlist("yandex", "Liked tracks", [track_factory(title="C")])
+def test_importing_twice_keeps_both_snapshots(imported, track_factory):
+    first_id, _ = imported
 
-    rows = db.get_playlist_tracks(playlist_id)
-    assert [row["title"] for row in rows] == ["C"], "stale tracks must not linger"
-    assert db.get_liked_playlist("yandex")["id"] == playlist_id
+    second_id = db.create_playlist(
+        "yandex", "Медиатека", [track_factory(title="Something New")]
+    )
 
-
-def test_reimport_does_not_leak_old_playlists(track_factory):
-    first = db.replace_liked_playlist("yandex", "Liked tracks", [track_factory(title="A")])
-    db.replace_liked_playlist("yandex", "Liked tracks", [track_factory(title="B")])
-
-    assert db.get_playlist_tracks(first) == [], "old playlist should be gone"
-    assert db.get_liked_playlist("yandex")["id"] != first
+    assert first_id != second_id
+    assert len(db.list_playlists("yandex")) == 2
+    assert db.playlist_track_count(first_id) == 3, "the old snapshot must survive"
 
 
-def test_chosen_match_moves_to_applied(playlist):
-    playlist_id, track_ids = playlist
+def test_target_playlist_is_empty_but_shares_the_source_order(imported):
+    src_id, _ = imported
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
+
+    assert db.playlist_track_count(dst_id) == 0, "targets hold matches, not copies"
+    assert db.match_counts(src_id, dst_id)["total"] == 3
+
+
+def test_playlist_kind_tells_import_from_export(imported):
+    src_id, _ = imported
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
+
+    assert db.playlist_kind(db.get_playlist(src_id)) == "imported"
+    assert db.playlist_kind(db.get_playlist(dst_id)) == "target"
+
+
+def test_chosen_match_moves_to_applied(imported):
+    src_id, track_ids = imported
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
 
     db.save_match(
+        dst_id,
         track_ids[0],
-        "youtube",
         {"external_id": "yt-1", "title": "Blue Monday", "artists": "New Order"},
         score=97,
     )
-    assert db.count_pending(playlist_id, "youtube") == 1
+    assert db.count_pending(src_id, dst_id) == 1
 
-    match = db.get_match(track_ids[0], "youtube")
+    match = db.get_match(dst_id, track_ids[0])
     db.mark_applied(match["id"])
 
-    counts = db.match_counts(playlist_id, "youtube")
+    counts = db.match_counts(src_id, dst_id)
     assert (counts["chosen"], counts["applied"], counts["total"]) == (0, 1, 3)
-    assert db.count_pending(playlist_id, "youtube") == 0
+    assert db.count_pending(src_id, dst_id) == 0
 
 
-def test_skip_overrides_previous_choice(playlist):
-    _, track_ids = playlist
+def test_skip_overrides_previous_choice(imported):
+    src_id, track_ids = imported
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
     src = track_ids[0]
 
-    db.save_match(src, "youtube", {"external_id": "yt-1", "title": "X"}, score=50)
-    db.skip_match(src, "youtube")
+    db.save_match(dst_id, src, {"external_id": "yt-1", "title": "X"}, score=50)
+    db.skip_match(dst_id, src)
 
-    match = db.get_match(src, "youtube")
+    match = db.get_match(dst_id, src)
     assert match["status"] == "skipped"
     assert match["dst_external_id"] is None, "skipped tracks must not be applied later"
 
 
-def test_matches_are_scoped_per_destination(playlist):
-    _, track_ids = playlist
-    src = track_ids[0]
+def test_matches_are_scoped_per_target_playlist(imported):
+    """Two exports of the same library must be reviewable independently."""
+    src_id, track_ids = imported
+    first = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
+    second = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
 
-    db.save_match(src, "youtube", {"external_id": "yt-1", "title": "X"}, score=50)
-    db.skip_match(src, "yandex")
+    db.save_match(first, track_ids[0], {"external_id": "yt-1", "title": "X"}, score=50)
+    db.skip_match(second, track_ids[0])
 
-    assert db.get_match(src, "youtube")["status"] == "chosen"
-    assert db.get_match(src, "yandex")["status"] == "skipped"
+    assert db.get_match(first, track_ids[0])["status"] == "chosen"
+    assert db.get_match(second, track_ids[0])["status"] == "skipped"
+
+    assert db.match_counts(src_id, first)["chosen"] == 1
+    assert db.match_counts(src_id, second)["skipped"] == 1
 
 
-def test_ordered_matches_tracks_unreviewed_rows(playlist):
-    playlist_id, track_ids = playlist
-    db.save_match(track_ids[1], "youtube", {"external_id": "yt-2", "title": "Enjoy"}, score=80)
+def test_ordered_matches_tracks_unreviewed_rows(imported):
+    src_id, track_ids = imported
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
+    db.save_match(dst_id, track_ids[1], {"external_id": "yt-2", "title": "Enjoy"}, score=80)
 
-    rows = db.ordered_matches(playlist_id, "youtube")
+    rows = db.ordered_matches(src_id, dst_id)
 
     assert [row["position"] for row in rows] == [0, 1, 2]
     assert [row["status"] for row in rows] == [None, "chosen", None]
 
 
-def test_deleting_playlist_cascades_to_rows(track_factory):
-    playlist_id = db.replace_liked_playlist(
-        "yandex", "Liked tracks", [track_factory(title="A"), track_factory(title="B")]
+def test_deleting_playlist_cascades_to_its_tracks(track_factory):
+    playlist_id = db.create_playlist(
+        "yandex", "Медиатека", [track_factory(title="A"), track_factory(title="B")]
     )
 
-    db._conn.execute("DELETE FROM playlists WHERE id = ?", (playlist_id,))  # noqa: SLF001
-    db._conn.commit()  # noqa: SLF001
+    db.delete_playlist(playlist_id)
 
-    assert db.get_playlist_tracks(playlist_id) == []
+    assert db.playlist_tracks(playlist_id) == []
+
+
+def test_deleting_source_playlist_removes_its_exports(imported):
+    src_id, _ = imported
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
+
+    db.delete_playlist(src_id)
+
+    assert db.get_playlist(dst_id) is None, "an export cannot outlive its source"
+
+
+def test_deleting_target_playlist_keeps_the_source(imported):
+    src_id, _ = imported
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
+
+    db.delete_playlist(dst_id)
+
+    assert db.get_playlist(src_id) is not None
+    assert db.playlist_track_count(src_id) == 3
 
 
 def test_deleting_unreferenced_track_cascades_to_matches(track_factory):
+    src_id = db.create_playlist("yandex", "Медиатека", [])
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
     track_id = db.upsert_track(track_factory(title="Orphan", external_id="orphan-1"))
     db._conn.commit()  # noqa: SLF001
-    db.save_match(track_id, "youtube", {"external_id": "yt-9", "title": "Orphan"}, score=40)
+    db.save_match(dst_id, track_id, {"external_id": "yt-9", "title": "Orphan"}, score=40)
 
     db._conn.execute("DELETE FROM tracks WHERE id = ?", (track_id,))  # noqa: SLF001
     db._conn.commit()  # noqa: SLF001
 
-    assert db.get_match(track_id, "youtube") is None
+    assert db.get_match(dst_id, track_id) is None
 
 
-def test_track_used_by_playlist_cannot_be_deleted(playlist):
-    _, track_ids = playlist
+def test_track_used_by_playlist_cannot_be_deleted(imported):
+    _, track_ids = imported
 
     with pytest.raises(sqlite3.IntegrityError):
         db._conn.execute("DELETE FROM tracks WHERE id = ?", (track_ids[0],))  # noqa: SLF001
 
 
-def test_search_cache_expires_on_refresh(playlist):
-    _, track_ids = playlist
+def test_search_cache_expires_on_refresh(imported):
+    _, track_ids = imported
     payload = [{"external_id": "a", "score": 10}]
 
     db.set_cached_search(track_ids[0], "youtube", payload)
@@ -152,20 +191,22 @@ def test_search_cache_expires_on_refresh(playlist):
     assert db.get_cached_search(track_ids[0], "youtube") is None
 
 
-def test_match_survives_reimport_of_same_library(playlist):
-    playlist_id, track_ids = playlist
-    src = track_ids[0]
-    db.save_match(src, "youtube", {"external_id": "yt-1", "title": "X"}, score=50)
+def test_playlist_counts_work_for_both_kinds(imported):
+    src_id, track_ids = imported
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
+    db.save_match(dst_id, track_ids[0], {"external_id": "yt-1", "title": "X"}, score=50)
 
-    db.replace_liked_playlist(
-        "yandex",
-        "Liked tracks",
-        [
-            {"service": "yandex", "external_id": db.get_track(t)["external_id"],
-             "title": db.get_track(t)["title"], "artists": db.get_track(t)["artists"],
-             "album": None, "thumbnail": None, "duration_s": 200}
-            for t in track_ids
-        ],
-    )
+    source_counts = db.playlist_counts(db.get_playlist(src_id))
+    target_counts = db.playlist_counts(db.get_playlist(dst_id))
 
-    assert db.get_match(src, "youtube")["status"] == "chosen", "re-import must not lose review work"
+    assert source_counts["total"] == 3
+    assert (target_counts["total"], target_counts["chosen"]) == (3, 1)
+
+
+def test_list_playlists_is_newest_first(imported, track_factory):
+    first_id, _ = imported
+    second_id = db.create_playlist("yandex", "Медиатека", [track_factory(title="Later")])
+
+    ids = [row["id"] for row in db.list_playlists("yandex")]
+    assert ids[0] == second_id
+    assert first_id in ids

@@ -701,3 +701,125 @@ table.library img.thumb {
 }
 
 .table-sentinel[hidden] { display: none; }
+
+/* --- playlist rows in the sidebar ------------------------------------- */
+
+.playlist-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.playlist-empty {
+  font-size: 0.75em;
+  color: #aaa;
+  padding: 2px 0 0 2px;
+}
+
+.playlist-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  border-left: 3px solid #e0e0e0;
+  border-radius: 0 7px 7px 0;
+  background: #fafbfc;
+  padding: 6px 8px;
+}
+
+.playlist-row.target { border-left-color: #ffb454; }
+.playlist-row:hover { background: #f4f6f8; }
+
+.playlist-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.playlist-name {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+}
+
+.playlist-sub {
+  font-size: 0.7em;
+  color: #888;
+}
+
+.playlist-source { color: #aaa; }
+
+.playlist-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.playlist-actions button {
+  border: none;
+  border-radius: 5px;
+  background: #007bff;
+  color: #fff;
+  font: inherit;
+  font-size: 0.72em;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.playlist-actions button:hover:not(:disabled) { background: #0056b3; }
+
+.playlist-actions button.secondary {
+  background: #e9ecef;
+  color: #333;
+}
+
+.playlist-actions button.secondary:hover:not(:disabled) { background: #d6dadd; }
+
+.playlist-actions button.danger {
+  background: transparent;
+  color: #bbb;
+  font-size: 0.9em;
+  padding: 0 5px;
+  line-height: 1.4;
+}
+
+.playlist-actions button.danger:hover { color: #c62828; background: #fdecea; }
+
+/* --- playlist table extras -------------------------------------------- */
+
+.table-host { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+table.library td .sub {
+  font-size: 0.85em;
+  color: #888;
+  margin-top: 1px;
+}
+
+table.library td.muted-cell { color: #bbb; }
+
+.status-pill {
+  display: inline-block;
+  border-radius: 99px;
+  padding: 1px 8px;
+  font-size: 0.78em;
+  background: #e9ecef;
+  color: #555;
+  white-space: nowrap;
+}
+
+.status-pill.chosen { background: #fff4e5; color: #b26a00; }
+.status-pill.applied { background: #e8f5e9; color: #2e7d32; }
+.status-pill.skipped { background: #fdecea; color: #c62828; }
+
+#main-content[data-view="library"] .table-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

@@ -2,6 +2,7 @@ import { $, api, toast, formatDuration, escapeHtml } from "./common.js";
 
 const workspace = $("#workspace");
 if (workspace) {
+  const playlistId = workspace.dataset.playlist;
   const src = workspace.dataset.src;
   const dst = workspace.dataset.dst;
   const dstName = workspace.dataset.dstName;
@@ -173,7 +174,7 @@ if (workspace) {
   // --- data ---------------------------------------------------------------
 
   async function loadTracks() {
-    const data = await api(`/api/tracks?src=${src}&dst=${dst}`);
+    const data = await api(`/api/tracks?playlist_id=${playlistId}`);
     state.tracks = data.tracks;
     state.counts = data.counts;
 
@@ -215,7 +216,7 @@ if (workspace) {
     if (!track) return;
 
     els.candidates.innerHTML = `<li style="cursor:default;color:#888">Ищем…</li>`;
-    const params = new URLSearchParams({ dst });
+    const params = new URLSearchParams({ playlist_id: playlistId });
     if (refresh) params.set("refresh", "true");
     if (query) params.set("query", query);
 
@@ -247,7 +248,7 @@ if (workspace) {
     if (!track) return;
 
     try {
-      await api(`/api/choose/${track.src_track_id}?dst=${dst}`, {
+      await api(`/api/choose/${track.src_track_id}?playlist_id=${playlistId}`, {
         method: "POST",
         body: JSON.stringify({ external_id: candidate.external_id }),
       });
@@ -271,7 +272,7 @@ if (workspace) {
     if (!track) return;
 
     try {
-      await api(`/api/skip/${track.src_track_id}?dst=${dst}`, { method: "POST" });
+      await api(`/api/skip/${track.src_track_id}?playlist_id=${playlistId}`, { method: "POST" });
 
       const was = statusOf(track);
       if (was === "chosen") state.counts.chosen -= 1;
@@ -291,13 +292,14 @@ if (workspace) {
 
     try {
       for (;;) {
-        const result = await api(`/api/apply?src=${src}&dst=${dst}&limit=50`, { method: "POST" });
+        const result = await api(`/api/apply?playlist_id=${playlistId}&limit=50`, { method: "POST" });
         applied += result.applied;
         if (applied) toast(`Пролайкано ${applied}…`);
         if (result.done || result.applied === 0) break;
       }
 
       toast(`${applied} треков пролайкано в ${dstName}`, "ok");
+      document.dispatchEvent(new CustomEvent("playlists:changed"));
       await loadTracks();
     } catch (error) {
       toast(error.message, "err");

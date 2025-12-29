@@ -4,14 +4,15 @@
 {% block content %}
 <div class="main-header">
   <h2>{{ src_name }} → {{ dst_name }}</h2>
-  <span class="muted">Сопоставление треков</span>
+  <span class="muted">Сопоставление треков · плейлист №{{ playlist_id }}</span>
 </div>
 
 <section
   class="workspace"
   id="workspace"
-  data-src="{{ src }}"
-  data-dst="{{ dst }}"
+  data-playlist="{{ playlist_id }}"
+  data-src="{{ src_service }}"
+  data-dst="{{ dst_service }}"
   data-src-name="{{ src_name }}"
   data-dst-name="{{ dst_name }}"
 >
@@ -35,7 +36,7 @@
 
   <div class="detail">
     <div id="empty-state" class="panel empty" hidden>
-      Сначала загрузите медиатеку на главной странице.
+      В исходном плейлисте нет треков.
     </div>
 
     <div id="source-pane" class="panel">

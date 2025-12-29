@@ -1,4 +1,4 @@
-"""Push the chosen matches to the destination service's liked library."""
+"""Push the chosen matches of one target playlist to the destination service."""
 
 import logging
 
@@ -12,28 +12,28 @@ BATCH_SIZE = 50
 
 
 class ApplyService:
-    """Likes every chosen track on the destination, in source playlist order."""
+    """Likes every chosen track of a target playlist, in source playlist order."""
 
-    def __init__(self, dst_service: str, src_service: str):
-        self.dst_service = dst_service
-        self.src_service = src_service
-
-    def _playlist(self) -> dict:
-        playlist = db.get_liked_playlist(self.src_service)
+    def __init__(self, dst_playlist_id: int):
+        playlist = db.get_playlist(dst_playlist_id)
         if not playlist:
-            raise ValueError(f"No imported library for {self.src_service}")
-        return dict(playlist)
+            raise ValueError(f"Unknown playlist {dst_playlist_id}")
+        if not playlist["source_playlist_id"]:
+            raise ValueError(f"Playlist {dst_playlist_id} is not a migration target")
+
+        self.playlist = playlist
+        self.playlist_id = int(playlist["id"])
+        self.dst_service = playlist["service"]
+        self.src_playlist_id = int(playlist["source_playlist_id"])
 
     def stats(self) -> dict:
-        playlist = self._playlist()
-        counts = db.match_counts(playlist["id"], self.dst_service)
-        counts["playlist_id"] = playlist["id"]
-        counts["pending"] = db.count_pending(playlist["id"], self.dst_service)
+        counts = db.match_counts(self.src_playlist_id, self.playlist_id)
+        counts["playlist_id"] = self.playlist_id
+        counts["pending"] = db.count_pending(self.src_playlist_id, self.playlist_id)
         return counts
 
     def apply(self, limit: int = BATCH_SIZE) -> dict:
-        playlist = self._playlist()
-        batch = db.pending_batch(playlist["id"], self.dst_service, limit)
+        batch = db.pending_batch(self.src_playlist_id, self.playlist_id, limit)
         if not batch:
             return {"applied": 0, "remaining": 0, "done": True}
 
@@ -47,7 +47,7 @@ class ApplyService:
         for row in batch:
             db.mark_applied(row["match_id"])
 
-        remaining = db.count_pending(playlist["id"], self.dst_service)
+        remaining = db.count_pending(self.src_playlist_id, self.playlist_id)
         return {
             "applied": len(batch),
             "sent": sent,

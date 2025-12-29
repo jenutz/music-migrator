@@ -1,4 +1,8 @@
-"""Fetch a service's liked library and persist it locally."""
+"""Fetch a service's liked library and snapshot it as a new playlist.
+
+Every import creates a separate playlist, so you can keep yesterday's snapshot
+around while importing again.
+"""
 
 import logging
 
@@ -7,14 +11,14 @@ from app.integrations.factory import choose_api
 
 logger = logging.getLogger(__name__)
 
-LIBRARY_NAME = "Liked tracks"
+IMPORTED_NAME = "Медиатека"
 
 # Keys the integrations may emit that we don't store.
 _TRACK_KEYS = ("service", "external_id", "title", "artists", "album", "thumbnail", "duration_s")
 
 
 class ImportService:
-    """Imports the liked library of one service into the local database."""
+    """Imports the liked library of one service into a new local playlist."""
 
     def __init__(self, service: str):
         self.service = service
@@ -46,8 +50,8 @@ class ImportService:
                 skipped += 1
                 logger.warning("Skipping unparsable %s track: %r", self.service, track)
 
-        playlist_id = db.replace_liked_playlist(self.service, LIBRARY_NAME, tracks)
-        logger.info("Stored %s tracks for %s (%s skipped)", len(tracks), self.service, skipped)
+        playlist_id = db.create_playlist(self.service, IMPORTED_NAME, tracks)
+        logger.info("Stored %s tracks as playlist %s", len(tracks), playlist_id)
 
         return {
             "service": self.service,
@@ -58,10 +62,12 @@ class ImportService:
 
     @staticmethod
     def status(service: str) -> dict:
-        playlist = db.get_liked_playlist(service)
         return {
             "service": service,
             "has_token": bool(db.get_setting(f"token-{service}")),
-            "playlist_id": playlist["id"] if playlist else None,
-            "imported": len(db.get_playlist_tracks(playlist["id"])) if playlist else 0,
+            "playlists": sum(
+                1
+                for playlist in db.list_playlists(service)
+                if db.playlist_kind(playlist) == "imported"
+            ),
         }

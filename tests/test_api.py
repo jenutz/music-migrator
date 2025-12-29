@@ -65,6 +65,14 @@ def fake(monkeypatch):
     return fake_client
 
 
+@pytest.fixture
+def youtube_import(client, fake):
+    """Log in to youtube and import, returning the new playlist id."""
+    client.post("/api/token/youtube", json={"value": "header-block"})
+    response = client.post("/api/import/youtube")
+    return response.json()["playlist_id"]
+
+
 def test_health(client):
     response = client.get("/health")
     assert response.status_code == 200
@@ -98,57 +106,132 @@ def test_empty_token_rejected(client):
     assert client.post("/api/import/yandex").status_code == 400
 
 
-def test_import_stores_library(client, fake):
+def test_import_creates_a_playlist(client, fake):
     client.post("/api/token/youtube", json={"value": "header-block"})
     response = client.post("/api/import/youtube")
 
     assert response.status_code == 200
-    assert response.json()["imported"] == 1
+    body = response.json()
+    assert body["imported"] == 1
 
-    rows = db.get_playlist_tracks(db.get_liked_playlist("youtube")["id"])
-    assert rows[0]["title"] == "Blue Monday"
+    playlist = db.get_playlist(body["playlist_id"])
+    assert playlist["service"] == "youtube"
+    assert playlist["source_playlist_id"] is None
+    assert db.playlist_tracks(playlist["id"])[0]["title"] == "Blue Monday"
 
 
-def test_full_flow(client, fake):
+def test_each_import_is_a_separate_playlist(client, fake):
     client.post("/api/token/youtube", json={"value": "header-block"})
-    client.post("/api/token/yandex", json={"value": "y0-token"})
-    client.post("/api/import/youtube")
 
-    playlist_id = db.get_liked_playlist("youtube")["id"]
-    src_track_id = db.get_playlist_tracks(playlist_id)[0]["id"]
+    first = client.post("/api/import/youtube").json()["playlist_id"]
+    second = client.post("/api/import/youtube").json()["playlist_id"]
+
+    assert first != second
+    listed = client.get("/api/playlists").json()["playlists"]
+    assert {playlist["id"] for playlist in listed} == {first, second}
+
+
+def test_export_creates_a_target_playlist(client, youtube_import):
+    client.post("/api/token/yandex", json={"value": "y0-token"})
+
+    response = client.post(
+        f"/api/export/{youtube_import}", json={"dst_service": "yandex"}
+    )
+
+    assert response.status_code == 200
+    target = response.json()["playlist"]
+    assert target["service"] == "yandex"
+    assert target["kind"] == "target"
+    assert target["source_playlist_id"] == youtube_import
+    assert target["total"] == 1
+
+
+def test_export_needs_a_token_on_the_destination(client, youtube_import):
+    response = client.post(f"/api/export/{youtube_import}", json={"dst_service": "yandex"})
+
+    assert response.status_code == 400
+    assert "войдите" in response.json()["detail"].lower()
+
+
+def test_export_rejects_same_service(client, youtube_import):
+    response = client.post(
+        f"/api/export/{youtube_import}", json={"dst_service": "youtube"}
+    )
+    assert response.status_code == 400
+
+
+def test_cannot_export_an_export(client, youtube_import):
+    client.post("/api/token/yandex", json={"value": "y0-token"})
+    target_id = client.post(
+        f"/api/export/{youtube_import}", json={"dst_service": "yandex"}
+    ).json()["playlist_id"]
+
+    response = client.post(f"/api/export/{target_id}", json={"dst_service": "youtube"})
+    assert response.status_code == 400
+
+
+def test_migrate_page_opens_the_target_playlist(client, youtube_import):
+    client.post("/api/token/yandex", json={"value": "y0-token"})
+    target_id = client.post(
+        f"/api/export/{youtube_import}", json={"dst_service": "yandex"}
+    ).json()["playlist_id"]
+
+    response = client.get(f"/migrate/{target_id}")
+    assert response.status_code == 200
+    assert "YouTube Music" in response.text
+
+
+def test_migrate_page_rejects_an_imported_playlist(client, youtube_import):
+    assert client.get(f"/migrate/{youtube_import}").status_code == 400
+
+
+def test_full_flow(client, fake, youtube_import):
+    client.post("/api/token/yandex", json={"value": "y0-token"})
+    target_id = client.post(
+        f"/api/export/{youtube_import}", json={"dst_service": "yandex"}
+    ).json()["playlist_id"]
+
+    src_track_id = client.get(f"/api/tracks?playlist_id={target_id}").json()["tracks"][0]["src_track_id"]
 
     # candidates are ranked, best first -- the live-only video must lose
-    candidates = client.get(f"/api/candidates/{src_track_id}?dst=yandex").json()["candidates"]
+    candidates = client.get(
+        f"/api/candidates/{src_track_id}?playlist_id={target_id}"
+    ).json()["candidates"]
     assert [c["external_id"] for c in candidates] == ["yt-1", "yt-2"]
     assert candidates[0]["score"] > candidates[1]["score"]
 
-    # pick the best one
-    chosen = client.post(f"/api/choose/{src_track_id}?dst=yandex", json={"external_id": "yt-1"})
+    chosen = client.post(
+        f"/api/choose/{src_track_id}?playlist_id={target_id}",
+        json={"external_id": "yt-1"},
+    )
     assert chosen.status_code == 200
 
-    stats = client.get("/api/apply/stats?src=youtube&dst=yandex").json()
+    stats = client.get(f"/api/apply/stats?playlist_id={target_id}").json()
     assert (stats["chosen"], stats["applied"]) == (1, 0)
 
-    applied = client.post("/api/apply?src=youtube&dst=yandex").json()
+    applied = client.post(f"/api/apply?playlist_id={target_id}").json()
     assert applied["applied"] == 1
     assert fake.liked == ["yt-1"], "exactly the picked track should be liked"
 
-    stats = client.get("/api/apply/stats?src=youtube&dst=yandex").json()
+    stats = client.get(f"/api/apply/stats?playlist_id={target_id}").json()
     assert (stats["chosen"], stats["applied"]) == (0, 1)
 
 
-def test_apply_is_idempotent(client, fake):
-    client.post("/api/token/youtube", json={"value": "header-block"})
+def test_apply_is_idempotent(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    client.post("/api/import/youtube")
+    target_id = client.post(
+        f"/api/export/{youtube_import}", json={"dst_service": "yandex"}
+    ).json()["playlist_id"]
+    src_track_id = client.get(f"/api/tracks?playlist_id={target_id}").json()["tracks"][0]["src_track_id"]
 
-    playlist_id = db.get_liked_playlist("youtube")["id"]
-    src_track_id = db.get_playlist_tracks(playlist_id)[0]["id"]
-    client.get(f"/api/candidates/{src_track_id}?dst=yandex")
-    client.post(f"/api/choose/{src_track_id}?dst=yandex", json={"external_id": "yt-1"})
+    client.get(f"/api/candidates/{src_track_id}?playlist_id={target_id}")
+    client.post(
+        f"/api/choose/{src_track_id}?playlist_id={target_id}",
+        json={"external_id": "yt-1"},
+    )
 
-    first = client.post("/api/apply?src=youtube&dst=yandex").json()
-    second = client.post("/api/apply?src=youtube&dst=yandex").json()
+    first = client.post(f"/api/apply?playlist_id={target_id}").json()
+    second = client.post(f"/api/apply?playlist_id={target_id}").json()
 
     assert first["applied"] == 1
     assert second["applied"] == 0
@@ -156,54 +239,79 @@ def test_apply_is_idempotent(client, fake):
     assert fake.liked == ["yt-1"], "second run must not re-like anything"
 
 
-def test_candidates_are_cached(client, fake, monkeypatch):
-    client.post("/api/token/youtube", json={"value": "header-block"})
+def test_two_exports_do_not_share_choices(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    client.post("/api/import/youtube")
+    first = client.post(f"/api/export/{youtube_import}", json={"dst_service": "yandex"}).json()["playlist_id"]
+    second = client.post(f"/api/export/{youtube_import}", json={"dst_service": "yandex"}).json()["playlist_id"]
 
-    playlist_id = db.get_liked_playlist("youtube")["id"]
-    src_track_id = db.get_playlist_tracks(playlist_id)[0]["id"]
+    src_track_id = client.get(f"/api/tracks?playlist_id={first}").json()["tracks"][0]["src_track_id"]
+    client.get(f"/api/candidates/{src_track_id}?playlist_id={first}")
+    client.post(f"/api/choose/{src_track_id}?playlist_id={first}", json={"external_id": "yt-1"})
+
+    assert client.get(f"/api/apply/stats?playlist_id={first}").json()["chosen"] == 1
+    assert client.get(f"/api/apply/stats?playlist_id={second}").json()["chosen"] == 0
+
+
+def test_candidates_are_cached(client, fake, monkeypatch, youtube_import):
+    client.post("/api/token/yandex", json={"value": "y0-token"})
+    target_id = client.post(
+        f"/api/export/{youtube_import}", json={"dst_service": "yandex"}
+    ).json()["playlist_id"]
+    src_track_id = client.get(f"/api/tracks?playlist_id={target_id}").json()["tracks"][0]["src_track_id"]
 
     searches = []
     original = fake.search
     monkeypatch.setattr(fake, "search", lambda q, limit=10: searches.append(q) or original(q, limit))
 
-    client.get(f"/api/candidates/{src_track_id}?dst=yandex")
-    client.get(f"/api/candidates/{src_track_id}?dst=yandex")
+    client.get(f"/api/candidates/{src_track_id}?playlist_id={target_id}")
+    client.get(f"/api/candidates/{src_track_id}?playlist_id={target_id}")
     assert len(searches) == 1, "second view should hit the cache"
 
-    client.get(f"/api/candidates/{src_track_id}?dst=yandex&refresh=true")
+    client.get(f"/api/candidates/{src_track_id}?playlist_id={target_id}&refresh=true")
     assert len(searches) == 2, "refresh must bypass the cache"
 
 
-def test_skip_marks_track(client, fake):
-    client.post("/api/token/youtube", json={"value": "header-block"})
+def test_skip_marks_track(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    client.post("/api/import/youtube")
+    target_id = client.post(
+        f"/api/export/{youtube_import}", json={"dst_service": "yandex"}
+    ).json()["playlist_id"]
+    src_track_id = client.get(f"/api/tracks?playlist_id={target_id}").json()["tracks"][0]["src_track_id"]
 
-    playlist_id = db.get_liked_playlist("youtube")["id"]
-    src_track_id = db.get_playlist_tracks(playlist_id)[0]["id"]
+    client.post(f"/api/skip/{src_track_id}?playlist_id={target_id}")
 
-    client.post(f"/api/skip/{src_track_id}?dst=yandex")
-
-    stats = client.get("/api/apply/stats?src=youtube&dst=yandex").json()
+    stats = client.get(f"/api/apply/stats?playlist_id={target_id}").json()
     assert (stats["skipped"], stats["chosen"]) == (1, 0)
 
 
-def test_same_service_pair_rejected(client):
-    response = client.get("/api/tracks?src=youtube&dst=youtube")
-    assert response.status_code == 400
+def test_playlist_detail_lists_tracks(client, youtube_import):
+    body = client.get(f"/api/playlist/{youtube_import}").json()
+
+    assert body["playlist"]["kind"] == "imported"
+    assert [track["title"] for track in body["tracks"]] == ["Blue Monday"]
 
 
-def test_unknown_service_rejected(client):
-    response = client.get("/api/tracks?src=spotify&dst=youtube")
-    assert response.status_code == 404
+def test_playlist_detail_of_a_target_shows_statuses(client, youtube_import):
+    client.post("/api/token/yandex", json={"value": "y0-token"})
+    target_id = client.post(
+        f"/api/export/{youtube_import}", json={"dst_service": "yandex"}
+    ).json()["playlist_id"]
+
+    body = client.get(f"/api/playlist/{target_id}").json()
+
+    assert body["playlist"]["kind"] == "target"
+    assert body["tracks"][0]["src_title"] == "Blue Monday"
+    assert body["tracks"][0]["status"] is None
 
 
-def test_migrate_page_renders(client):
-    response = client.get("/migrate/yandex/youtube")
-    assert response.status_code == 200
-    assert "Yandex Music" in response.text
+def test_deleting_a_playlist_removes_it_from_the_list(client, youtube_import):
+    assert client.delete(f"/api/playlist/{youtube_import}").status_code == 200
+    assert client.get("/api/playlists").json()["playlists"] == []
+
+
+def test_unknown_playlist_is_404(client):
+    assert client.get("/api/playlist/9999").status_code == 404
+    assert client.get("/api/tracks?playlist_id=9999").status_code == 404
 
 
 def test_stale_youtube_token_gives_actionable_error(client, monkeypatch):

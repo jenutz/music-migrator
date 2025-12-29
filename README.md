@@ -8,17 +8,26 @@ a users table was just cost.
 
 ## How it works
 
+Playlists are the unit of work, not services. A service row only logs in and
+imports; everything you review and apply happens inside a playlist.
+
 1. Connect a service — for Yandex press **Войти через Яндекс** and confirm the
    code on the Yandex page; YouTube still takes a pasted header block.
-2. Import that service's liked tracks into the local database.
-3. Open the workspace: it shows one source track at a time, searches the other
-   service by `title + artist`, and ranks candidates by a fuzzy score
-   (title, artist, duration, and a small penalty for music videos).
-4. Pick the right one, or skip. Choices are saved immediately, so closing the
-   tab costs nothing.
+2. **Загрузить** snapshots that service's liked tracks into a new playlist,
+   listed in the sidebar under the service with the date it was imported.
+   Importing again creates another playlist instead of overwriting the old one.
+3. **Экспорт** on a playlist creates a *target* playlist on the other service.
+   Several targets can exist for the same source, each with its own choices.
+4. In the target playlist: one source track at a time, searched on the other
+   service by `title + artist` and ranked by a fuzzy score (title, artist,
+   duration, and a small penalty for music videos). Pick one or skip; choices
+   are saved immediately.
 5. Hit the apply button. It likes the chosen tracks on the destination in
    source-playlist order, 50 at a time, and is safe to re-run — applied tracks
-   are marked so they are not sent twice.
+   are marked so they are not sent twice. The sidebar row shows the progress.
+
+Deleting a playlist cascades: dropping an import also drops the targets made
+from it, while deleting a target leaves the source alone.
 
 ## Running it
 
@@ -60,13 +69,17 @@ pytest tests -q
 ```
 
 The HTTP tests stub out the service clients, so they run offline. They cover
-the scoring rules, playlist ordering, the chosen → applied transition, and that
-re-running apply does not double-like anything.
+the scoring rules, playlist ordering, per-playlist scoping of choices, the
+chosen → applied transition, and that re-running apply does not double-like
+anything.
 
 ## Known rough edges
 
 - YouTube's header token expires eventually; if import starts 401-ing, paste a
   fresh one.
+- There is no rename: playlists are identified by their import/export time.
+- A target playlist holds matches, not copies, so it only lists tracks that
+  were chosen in it.
 - Search results are cached per track, so re-searching after editing the query
   is explicit (`Search` button / `refresh=true`) rather than automatic.
 - Duration heuristics assume the two services agree on track length — live and

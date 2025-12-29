@@ -47,13 +47,23 @@ def track_factory():
 
 
 @pytest.fixture
-def playlist(track_factory):
-    """Create a source library and return (playlist_id, track_ids)."""
+def imported(track_factory):
+    """An imported playlist and the local ids of its tracks, in order."""
     tracks = [
         track_factory(title="Blue Monday", artists="New Order"),
         track_factory(title="Enjoy the Silence", artists="Depeche Mode"),
         track_factory(title="Sweet Dreams", artists="Eurythmics"),
     ]
-    playlist_id = db.replace_liked_playlist("yandex", "Liked tracks", tracks)
-    ids = [row["id"] for row in db.get_playlist_tracks(playlist_id)]
+    playlist_id = db.create_playlist("yandex", "Медиатека", tracks)
+    ids = [row["id"] for row in db.playlist_tracks(playlist_id)]
     return playlist_id, ids
+
+
+@pytest.fixture
+def target(imported):
+    """A target playlist created by exporting the imported one to youtube."""
+    src_playlist_id, track_ids = imported
+    dst_playlist_id = db.create_playlist(
+        "youtube", "Экспорт", source_playlist_id=src_playlist_id
+    )
+    return dst_playlist_id, track_ids
