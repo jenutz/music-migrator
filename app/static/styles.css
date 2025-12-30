@@ -755,6 +755,21 @@ table.library img.thumb {
 
 .playlist-source { color: #aaa; }
 
+/* the snapshot a target playlist was exported from, on its own line */
+.playlist-origin {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  padding-left: 2px;
+  font-size: 0.68em;
+  color: #999;
+  font-variant-numeric: tabular-nums;
+}
+
+.playlist-origin-service { color: #b3b3b3; }
+
 .playlist-actions {
   display: flex;
   gap: 4px;

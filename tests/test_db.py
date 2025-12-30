@@ -210,3 +210,17 @@ def test_list_playlists_is_newest_first(imported, track_factory):
     ids = [row["id"] for row in db.list_playlists("yandex")]
     assert ids[0] == second_id
     assert first_id in ids
+
+
+def test_pending_batch_keeps_source_order(imported):
+    """The UI shows newest first, but likes must go in the original order."""
+    src_id, track_ids = imported
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
+
+    for track_id in reversed(track_ids):  # chosen out of order, on purpose
+        db.save_match(dst_id, track_id, {"external_id": f"yt-{track_id}", "title": "X"}, score=90)
+
+    batch = db.pending_batch(src_id, dst_id, 10)
+
+    assert [row["position"] for row in batch] == [0, 1, 2]
+    assert [row["dst_external_id"] for row in batch] == [f"yt-{t}" for t in track_ids]

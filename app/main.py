@@ -82,6 +82,8 @@ def _playlist_payload(playlist: sqlite3.Row) -> dict:
         "source_playlist_id": playlist["source_playlist_id"],
         "source_name": source["name"] if source else None,
         "source_service": source["service"] if source else None,
+        "source_service_name": FULL_NAME.get(source["service"], source["service"]) if source else None,
+        "source_created_at": source["created_at"] if source else None,
         **counts,
     }
 
@@ -151,6 +153,7 @@ def migrate_page(request: Request, playlist_id: int):
             "playlist": playlist,
             "playlist_id": playlist_id,
             "src_service": source["service"],
+            "src_created_at": source["created_at"],
             "dst_service": playlist["service"],
             "src_name": FULL_NAME[source["service"]],
             "dst_name": FULL_NAME[playlist["service"]],

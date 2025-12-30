@@ -1,4 +1,4 @@
-import { $, $$, api, toast, formatDuration, escapeHtml } from "./common.js";
+import { $, $$, api, toast, formatWhen, formatDuration, escapeHtml } from "./common.js";
 
 const TRACK_URL = {
   yandex: (id) => `https://music.yandex.ru/track/${id}`,
@@ -8,14 +8,6 @@ const TRACK_URL = {
 const main = $("#main-content");
 
 // --- helpers --------------------------------------------------------------
-
-function formatWhen(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso || "";
-  const pad = (value) => String(value).padStart(2, "0");
-  return `${pad(date.getDate())}.${pad(date.getMonth() + 1)}.${date.getFullYear()}`
-    + ` ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
 
 // Covers are stored at 200x200; ask the service for something near the size we
 // actually paint so a long library does not fetch full-size images.
@@ -41,15 +33,21 @@ let playlists = [];
 
 function playlistRowHtml(playlist) {
   const target = playlist.kind === "target";
-  const source = playlist.source_name && playlist.source_service
-    ? `<span class="playlist-source">← ${escapeHtml(playlist.source_service === "yandex" ? "Yandex Music" : "YouTube Music")}</span>`
+
+  // A target playlist is only meaningful next to the snapshot it came from,
+  // so spell that out under the row instead of a bare service name.
+  const origin = target && playlist.source_created_at
+    ? `<span class="playlist-origin" title="Исходный плейлист">
+         ← ${formatWhen(playlist.source_created_at)}
+         <span class="playlist-origin-service">${escapeHtml(playlist.source_service_name || "")}</span>
+       </span>`
     : "";
 
   return `
     <li class="playlist-row${target ? " target" : ""}" data-id="${playlist.id}" data-kind="${playlist.kind}">
       <div class="playlist-meta">
         <span class="playlist-name">${formatWhen(playlist.created_at)}</span>
-        <span class="playlist-sub">${escapeHtml(playlistSubtitle(playlist))} ${source}</span>
+        <span class="playlist-sub">${escapeHtml(playlistSubtitle(playlist))}</span>
       </div>
       <div class="playlist-actions">
         ${target
@@ -58,6 +56,7 @@ function playlistRowHtml(playlist) {
         <button data-act="view" class="secondary" title="Показать треки">Просмотр</button>
         <button data-act="delete" class="danger" title="Удалить плейлист">×</button>
       </div>
+      ${origin}
     </li>
   `;
 }
@@ -202,9 +201,11 @@ const STATUS_LABEL = {
   skipped: "пропущено",
 };
 
+// position 0 is the oldest liked track, so "latest to oldest" is position
+// descending - that is also the default view.
 function sortRows(rows, key, direction) {
   const sorted = rows.slice();
-  if (!key) return sorted.sort((a, b) => a.position - b.position);
+  if (!key) return sorted.sort((a, b) => b.position - a.position);
 
   const factor = direction === "desc" ? -1 : 1;
 
@@ -257,7 +258,7 @@ function cellHtml(row, key, service) {
 }
 
 function renderTable(container, { columns, rows, service }) {
-  const sort = { key: null, direction: "asc" };
+  const sort = { key: "position", direction: "desc" };
   const PAGE = 80;
 
   container.innerHTML = `

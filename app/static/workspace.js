@@ -1,4 +1,4 @@
-import { $, api, toast, formatDuration, escapeHtml } from "./common.js";
+import { $, api, toast, formatWhen, formatDuration, escapeHtml } from "./common.js";
 
 const workspace = $("#workspace");
 if (workspace) {
@@ -37,6 +37,10 @@ if (workspace) {
     applySkipped: $("#apply-skipped"),
     applyTotal: $("#apply-total"),
   };
+
+  // The header is server-rendered in UTC; rewrite it in local time.
+  const origin = $("#src-origin");
+  if (origin) origin.textContent = formatWhen(origin.dataset.created);
 
   const statusOf = (track) => track.status || "todo";
   const currentTrack = () => state.tracks[state.activeIndex];
@@ -175,7 +179,10 @@ if (workspace) {
 
   async function loadTracks() {
     const data = await api(`/api/tracks?playlist_id=${playlistId}`);
-    state.tracks = data.tracks;
+    // The API returns source order (oldest liked first); the workspace reads
+    // newest first by default. Applying still happens in source order - that
+    // is decided server-side, not by this list.
+    state.tracks = data.tracks.slice().reverse();
     state.counts = data.counts;
 
     if (!state.tracks.length) {
