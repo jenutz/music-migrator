@@ -7,8 +7,5 @@ services:
     environment:
       DATA_DIR: /srv/data
     volumes:
-      - app_data:/srv/data
+      - ./data:/srv/data
     restart: unless-stopped
-
-volumes:
-  app_data:

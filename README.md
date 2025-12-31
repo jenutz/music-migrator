@@ -43,7 +43,9 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Data lives in `data/app.db` (or `$DATA_DIR/app.db`).
+Data lives in `data/app.db` (or `$DATA_DIR/app.db`). Compose bind-mounts
+`./data`, so the database is a normal file you own - open it with any sqlite
+client, copy it, and it survives `docker compose down -v`.
 
 ## Tokens
 
