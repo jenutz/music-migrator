@@ -236,6 +236,17 @@ def get_track(track_id: int) -> sqlite3.Row | None:
     return query_one("SELECT * FROM tracks WHERE id = ?", (track_id,))
 
 
+def tracks_for_service(service: str) -> list[sqlite3.Row]:
+    return query(
+        """
+        SELECT service, external_id, title, artists, album, thumbnail, duration_s
+        FROM tracks
+        WHERE service = ?
+        """,
+        (service,),
+    )
+
+
 # --- playlists ------------------------------------------------------------
 
 

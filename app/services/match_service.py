@@ -1,8 +1,10 @@
 """Candidate search + similarity scoring, scoped to one target playlist."""
 
 import difflib
+import functools
 import logging
 import re
+import sqlite3
 
 from app import db
 from app.integrations.factory import choose_api
@@ -19,6 +21,7 @@ except ImportError:  # pragma: no cover - fallback keeps the app usable
 _BRACKETS = re.compile(r"\([^)]*\)|\[[^\]]*\]")
 
 
+@functools.lru_cache(maxsize=8192)
 def _norm(text: str | None) -> str:
     text = strip_tags(text or "")
     text = _BRACKETS.sub(" ", text)
@@ -59,6 +62,11 @@ def score_track(source: dict, candidate: dict) -> int:
 class MatchService:
     """Works on one target playlist: search, choose, skip."""
 
+    LOCAL_GOOD_ENOUGH = 88
+    LOCAL_MIN_SCORE = 45
+    LOCAL_SPREAD = 15
+    LOCAL_LIMIT = 10
+
     def __init__(self, dst_playlist_id: int):
         playlist = db.get_playlist(dst_playlist_id)
         if not playlist:
@@ -73,6 +81,41 @@ class MatchService:
 
     # --- candidates ------------------------------------------------------
 
+    def _local_candidates(self, source: sqlite3.Row) -> list[dict]:
+        """Ids from here are likeable without a round trip."""
+        scorer_input = dict(source)
+        found = []
+
+        for row in db.tracks_for_service(self.dst_service):
+            candidate = dict(row)
+            candidate["score"] = score_track(scorer_input, candidate)
+            if candidate["score"] >= self.LOCAL_MIN_SCORE:
+                candidate["origin"] = "db"
+                found.append(candidate)
+
+        found.sort(key=lambda item: item["score"], reverse=True)
+        if not found:
+            return []
+
+        cutoff = max(self.LOCAL_MIN_SCORE, found[0]["score"] - self.LOCAL_SPREAD)
+        return [candidate for candidate in found if candidate["score"] >= cutoff][: self.LOCAL_LIMIT]
+
+    @classmethod
+    def _merge(cls, local: list[dict], remote: list[dict]) -> list[dict]:
+        merged: dict[str, dict] = {}
+
+        for candidate in remote:
+            merged[str(candidate.get("external_id"))] = candidate
+        for candidate in local:
+            key = str(candidate.get("external_id"))
+            existing = merged.get(key)
+            if existing is None or existing.get("score", 0) < candidate["score"]:
+                merged[key] = candidate
+
+        results = list(merged.values())
+        results.sort(key=lambda item: item.get("score", 0), reverse=True)
+        return results[: cls.LOCAL_LIMIT]
+
     def candidates(self, src_track_id: int, refresh: bool = False, query: str | None = None) -> list[dict]:
         source = db.get_track(src_track_id)
         if not source:
@@ -83,17 +126,25 @@ class MatchService:
             if cached is not None:
                 return cached
 
+        local = [] if query else self._local_candidates(source)
+
+        if local and local[0]["score"] >= self.LOCAL_GOOD_ENOUGH and not refresh:
+            # not cached: it is a view of the library as it is right now
+            logger.info("Answered %r from the local library", source["title"])
+            return local
+
         token = db.get_setting(f"token-{self.dst_service}")
         client = choose_api(self.dst_service, token)
         search_query = query or f"{source['title']} {source['artists']}"
 
         logger.info("Searching %s for %r", self.dst_service, search_query)
-        results = client.search(search_query, limit=10)
+        remote = client.search(search_query, limit=10)
 
-        for result in results:
+        for result in remote:
             result["score"] = score_track(dict(source), result)
+            result["origin"] = "search"
 
-        results.sort(key=lambda r: r["score"], reverse=True)
+        results = self._merge(local, remote)
         db.set_cached_search(src_track_id, self.dst_service, results)
         return results
 

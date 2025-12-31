@@ -149,12 +149,15 @@ if (workspace) {
 
     list.forEach((candidate, index) => {
       const li = document.createElement("li");
+      const origin = candidate.origin === "db"
+        ? `<span class="origin-tag" title="Трек уже есть в локальной базе — искать в сервисе не пришлось">из базы</span>`
+        : "";
       li.innerHTML = `
         <span class="badge">${index + 1}</span>
         <img src="${cover(candidate.thumbnail, '100x100')}" alt="" loading="lazy"
              decoding="async" onerror="this.style.visibility='hidden'">
         <div class="info">
-          <h4>${escapeHtml(candidate.title)}</h4>
+          <h4>${escapeHtml(candidate.title)} ${origin}</h4>
           <p>${escapeHtml(candidate.artists || "")}${candidate.album ? " · " + escapeHtml(candidate.album) : ""}</p>
         </div>
         <span style="color:#888">${formatDuration(candidate.duration_s)}</span>

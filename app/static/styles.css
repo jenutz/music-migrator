@@ -838,3 +838,17 @@ table.library td.muted-cell { color: #bbb; }
   display: flex;
   flex-direction: column;
 }
+
+.origin-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 99px;
+  background: #eef2f7;
+  color: #6b7a90;
+  font-size: 0.62em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
