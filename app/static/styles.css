@@ -476,6 +476,15 @@ table.library img.thumb {
 }
 
 .candidates li:hover { border-color: #007bff; background: #fff; }
+
+/* suggestion already in the local library: free to pick, no search needed */
+.candidates li.from-db {
+  border-color: #cfe6d4;
+  background: #f3faf5;
+  box-shadow: inset 3px 0 0 #57b06f;
+}
+
+.candidates li.from-db:hover { border-color: #007bff; background: #eef8f1; }
 .candidates img { width: 44px; height: 44px; border-radius: 7px; object-fit: cover; background: #e9ecef; flex-shrink: 0; }
 .candidates .info { flex: 1; min-width: 0; }
 .candidates .info h4 { margin: 0 0 2px; font-size: 0.95em; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -842,10 +851,10 @@ table.library td.muted-cell { color: #bbb; }
 .origin-tag {
   display: inline-block;
   margin-left: 6px;
-  padding: 0 6px;
+  padding: 1px 6px;
   border-radius: 99px;
-  background: #eef2f7;
-  color: #6b7a90;
+  background: #ddf0e2;
+  color: #2f7a45;
   font-size: 0.62em;
   font-weight: 600;
   letter-spacing: 0.02em;

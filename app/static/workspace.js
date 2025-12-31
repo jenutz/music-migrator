@@ -149,7 +149,9 @@ if (workspace) {
 
     list.forEach((candidate, index) => {
       const li = document.createElement("li");
-      const origin = candidate.origin === "db"
+      const fromDb = candidate.origin === "db";
+      li.classList.toggle("from-db", fromDb);
+      const origin = fromDb
         ? `<span class="origin-tag" title="Трек уже есть в локальной базе — искать в сервисе не пришлось">из базы</span>`
         : "";
       li.innerHTML = `
