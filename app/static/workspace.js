@@ -120,6 +120,8 @@ if (workspace) {
     }
 
     els.sourceCard.innerHTML = `
+      <a class="open-link" href="${trackLink(src, track.src_external_id)}"
+         target="_blank" rel="noopener" title="Открыть в исходном сервисе">↗</a>
       <img src="${cover(track.src_thumbnail, '100x100')}" alt="" loading="lazy"
            decoding="async" onerror="this.style.visibility='hidden'">
       <div class="meta">
@@ -128,8 +130,6 @@ if (workspace) {
         <p>${formatDuration(track.src_duration_s)}</p>
         ${note}
       </div>
-      <a class="open-link" href="${trackLink(src, track.src_external_id)}"
-         target="_blank" rel="noopener" title="Открыть в исходном сервисе">↗</a>
     `;
   }
 
@@ -173,7 +173,7 @@ if (workspace) {
       link.title = "Открыть в сервисе назначения";
       link.textContent = "↗";
       link.addEventListener("click", (event) => event.stopPropagation());
-      li.appendChild(link);
+      li.insertBefore(link, li.firstChild);
 
       li.addEventListener("click", () => choose(candidate));
       els.candidates.appendChild(li);

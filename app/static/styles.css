@@ -586,16 +586,16 @@ table.library td:first-child { width: 42px; color: #999; }
   width: 26px;
   height: 26px;
   border-radius: 6px;
-  color: #888;
+  border: 1px solid #d9e0e7;
+  background: #fff;
+  color: #7c8896;
   text-decoration: none;
   flex-shrink: 0;
-  font-size: 16px;
+  font-size: 15px;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.open-link:hover { background: #e9ecef; color: #007bff; }
-
-.candidates li .open-link { opacity: 0; transition: opacity 0.15s; }
-.candidates li:hover .open-link { opacity: 1; }
+.open-link:hover { background: #eef4ff; border-color: #b9d0f2; color: #007bff; }
 
 /* track counter next to the sidebar title */
 .track-list-head h3 {
