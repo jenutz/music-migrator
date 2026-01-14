@@ -1,4 +1,4 @@
-"""Turn an imported playlist into a target playlist on another service."""
+"""Turn an imported playlist into a target playlist."""
 
 import logging
 
@@ -9,9 +9,21 @@ logger = logging.getLogger(__name__)
 
 EXPORTED_NAME = "Экспорт"
 
+# where the chosen tracks end up on the destination service
+DELIVERIES = ("likes", "playlist")
 
-def create_target_playlist(src_playlist_id: int, dst_service: str) -> dict:
-    """Create a playlist on `dst_service` that will be filled from the source."""
+
+def create_target_playlist(
+    src_playlist_id: int,
+    dst_service: str,
+    delivery: str = "likes",
+    name: str | None = None,
+) -> dict:
+    """Create a playlist on `dst_service` that will be filled from the source.
+
+    `dst_service` may be the source's own service: that is how a liked library
+    becomes a real playlist (or the other way round) without leaving the app.
+    """
     source = db.get_playlist(src_playlist_id)
     if not source:
         raise ValueError(f"Unknown playlist {src_playlist_id}")
@@ -19,18 +31,32 @@ def create_target_playlist(src_playlist_id: int, dst_service: str) -> dict:
         raise ValueError("Нельзя экспортировать уже экспортированный плейлист")
 
     service = MusicService(dst_service).value
-    if service == source["service"]:
-        raise ValueError("Плейлист уже принадлежит этому сервису")
+    if delivery not in DELIVERIES:
+        raise ValueError(f"Unknown delivery: {delivery}")
 
     if not db.get_setting(f"token-{service}"):
         raise ValueError(f"Сначала войдите в {FULL_NAME[service]}")
 
+    # `name` is what the destination playlist gets called; the sidebar labels
+    # targets by date, so it does not need to be the local row label.
     playlist_id = db.create_playlist(
         service=service,
-        name=EXPORTED_NAME,
+        name=name or source["name"],
         tracks=None,
         source_playlist_id=src_playlist_id,
+        delivery=delivery,
     )
-    logger.info("Exporting playlist %s to %s as %s", src_playlist_id, service, playlist_id)
+    logger.info(
+        "Exporting playlist %s to %s as %s (%s)",
+        src_playlist_id,
+        service,
+        playlist_id,
+        delivery,
+    )
 
-    return {"playlist_id": playlist_id, "service": service, "source_playlist_id": src_playlist_id}
+    return {
+        "playlist_id": playlist_id,
+        "service": service,
+        "delivery": delivery,
+        "source_playlist_id": src_playlist_id,
+    }

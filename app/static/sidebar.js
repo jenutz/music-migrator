@@ -123,53 +123,93 @@ function showWelcome() {
   location.href = "/";
 }
 
+const DELIVERY_OPTIONS = [
+  {
+    value: "playlist",
+    label: "Новый плейлист",
+    hint: "В выбранном сервисе появится плейлист с отмеченными треками.",
+  },
+  {
+    value: "likes",
+    label: "В лайки",
+    hint: "Отмеченные треки добавятся в медиатеку выбранного сервиса.",
+  },
+];
+
 function renderChooser(sourcePlaylist) {
   clearView();
-  const others = $$(".service-row")
-    .map((row) => row.dataset.service)
-    .filter((service) => service !== sourcePlaylist.service);
+  const services = $$(".service-row").map((row) => row.dataset.service);
+  let delivery = "playlist";
 
   main.innerHTML = `
     <div class="main-header">
       <h2>Экспорт плейлиста</h2>
       <span class="muted">${formatWhen(sourcePlaylist.created_at)} · ${sourcePlaylist.total} треков</span>
     </div>
-    <div class="panel">
-      <p style="margin-top:0;color:#555">
-        Будет создан новый плейлист в выбранном сервисе. Выборы сохраняются в нём,
-        исходный плейлист остаётся нетронутым.
-      </p>
+    <div class="panel export-panel">
+      <h3 class="export-step">Куда</h3>
+      <div class="delivery-pick">
+        ${DELIVERY_OPTIONS.map((option) => `
+          <button class="delivery${option.value === delivery ? " active" : ""}"
+                  data-delivery="${option.value}">${option.label}</button>
+        `).join("")}
+      </div>
+      <p class="export-hint" id="export-hint"></p>
+
+      <h3 class="export-step">В какой сервис</h3>
       <div class="services-row">
-        ${others.map((sid) => {
+        ${services.map((sid) => {
           const row = $(`.service-row[data-service="${sid}"]`);
           const name = row?.dataset.fullname || sid;
           const ready = !$(".load-btn", row)?.disabled;
+          const same = sid === sourcePlaylist.service;
           return `<button class="service-pick" data-dst="${sid}" ${ready ? "" : "disabled"}>
             <img src="/static/${sid}_icon.svg" alt="${sid}">
             <span>${escapeHtml(name)}</span>
-            ${ready ? "" : '<small style="color:#999">нет токена</small>'}
+            ${same ? '<small>тот же сервис</small>' : ""}
+            ${ready ? "" : '<small class="muted">нет токена</small>'}
           </button>`;
         }).join("")}
       </div>
+      <p class="export-note">
+        Исходный плейлист остаётся нетронутым — экспорт только читает его.
+      </p>
     </div>
   `;
 
-  $$(".service-pick", main).forEach((btn) => {
+  const hint = $("#export-hint", main);
+  const paintHint = () => {
+    hint.textContent = DELIVERY_OPTIONS.find((option) => option.value === delivery).hint;
+    for (const btn of $$(".delivery", main)) {
+      btn.classList.toggle("active", btn.dataset.delivery === delivery);
+    }
+  };
+  paintHint();
+
+  for (const btn of $$(".delivery", main)) {
+    btn.addEventListener("click", () => {
+      delivery = btn.dataset.delivery;
+      paintHint();
+    });
+  }
+
+  for (const btn of $$(".service-pick", main)) {
     btn.addEventListener("click", async () => {
       btn.disabled = true;
       try {
         const result = await api(`/api/export/${sourcePlaylist.id}`, {
           method: "POST",
-          body: JSON.stringify({ dst_service: btn.dataset.dst }),
+          body: JSON.stringify({ dst_service: btn.dataset.dst, delivery }),
         });
         await refreshPlaylists();
+        toast(result.delivery === "playlist" ? "Плейлист создан" : "Экспорт в лайки готов", "ok");
         location.href = `/migrate/${result.playlist_id}`;
       } catch (error) {
         toast(error.message, "err");
         btn.disabled = false;
       }
     });
-  });
+  }
 }
 
 // --- library table --------------------------------------------------------
@@ -559,6 +599,34 @@ for (const row of $$(".service-row")) {
       toast(error.message, "err");
     } finally {
       button.disabled = false;
+    }
+  });
+
+  $(".clear-btn", row).addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const name = row.dataset.fullname || service;
+
+    // Irreversible and touches the account itself, not our copy of it, so it
+    // asks for the service name rather than a single OK.
+    const typed = prompt(
+      `Удалить ВСЕ лайки в ${name}?\n\n` +
+        "Это действие в самом сервисе, отменить его нельзя. " +
+        `Введите «${service}», чтобы подтвердить:`
+    );
+    if (typed === null) return;
+    if (typed.trim().toLowerCase() !== service) return toast("Отменено", "err");
+
+    button.disabled = true;
+    button.textContent = "Чистим…";
+    try {
+      const result = await api(`/api/service/${service}/clear-likes`, { method: "POST" });
+      toast(`Удалено лайков: ${result.removed}`, "ok");
+      await refreshPlaylists();
+    } catch (error) {
+      toast(error.message, "err");
+    } finally {
+      button.disabled = false;
+      button.textContent = "Очистить";
     }
   });
 

@@ -166,10 +166,21 @@ class MatchService:
         return {"src_track_id": src_track_id, "status": "chosen"}
 
     def choose_by_id(self, src_track_id: int, external_id: str) -> dict:
-        """Pick a candidate from the cached result set (used by the UI)."""
+        """Pick a candidate the UI showed, by its external id."""
         for candidate in db.get_cached_search(src_track_id, self.dst_service) or []:
             if candidate.get("external_id") == external_id:
                 return self.choose(src_track_id, candidate)
+
+        # Local answers are deliberately not cached, so score the library again
+        # instead of telling the user their own click was invalid.
+        source = db.get_track(src_track_id)
+        if not source:
+            raise ValueError(f"Unknown track {src_track_id}")
+
+        for candidate in self._local_candidates(source):
+            if candidate.get("external_id") == external_id:
+                return self.choose(src_track_id, candidate)
+
         raise ValueError(f"Candidate {external_id} not found for track {src_track_id}")
 
     def skip(self, src_track_id: int) -> dict:

@@ -59,6 +59,8 @@
       <div class="buttons">
         <button class="login-btn">Войти</button>
         <button class="load-btn" {% if not st.has_token %}disabled{% endif %}>Загрузить</button>
+        <button class="clear-btn danger" {% if not st.has_token %}disabled{% endif %}
+                title="Удалить все лайки в сервисе">Очистить</button>
       </div>
 
       <ul class="playlist-list" data-service="{{ sid }}">

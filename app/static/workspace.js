@@ -6,6 +6,10 @@ if (workspace) {
   const src = workspace.dataset.src;
   const dst = workspace.dataset.dst;
   const dstName = workspace.dataset.dstName;
+  const delivery = workspace.dataset.delivery || "likes";
+  const toPlaylist = delivery === "playlist";
+  const appliedWord = toPlaylist ? "добавлено" : "пролайкано";
+  const applyVerb = toPlaylist ? "Добавить" : "Лайкнуть";
 
   const TRACK_URL = {
     yandex: (id) => `https://music.yandex.ru/track/${id}`,
@@ -61,7 +65,7 @@ if (workspace) {
 
     els.progressBar.style.width = `${percent}%`;
     els.progressText.textContent = total
-      ? `разобрано ${reviewed} из ${total} · пролайкано ${applied}`
+      ? `разобрано ${reviewed} из ${total} · ${appliedWord} ${applied}`
       : "медиатека не загружена";
 
     const counter = $("#track-count");
@@ -74,8 +78,10 @@ if (workspace) {
 
     els.applyBtn.disabled = chosen === 0;
     els.applyBtn.textContent = chosen
-      ? `Лайкнуть выбранные (${chosen}) в ${dstName}`
-      : "Пока нечего лайкать";
+      ? (toPlaylist
+        ? `Добавить выбранные (${chosen}) → плейлист в ${dstName}`
+        : `${applyVerb} выбранные (${chosen}) в ${dstName}`)
+      : "Пока нечего переносить";
   }
 
   function renderList() {
@@ -311,11 +317,11 @@ if (workspace) {
       for (;;) {
         const result = await api(`/api/apply?playlist_id=${playlistId}&limit=50`, { method: "POST" });
         applied += result.applied;
-        if (applied) toast(`Пролайкано ${applied}…`);
+        if (applied) toast(`${appliedWord} ${applied}…`);
         if (result.done || result.applied === 0) break;
       }
 
-      toast(`${applied} треков пролайкано в ${dstName}`, "ok");
+      toast(`${applied} треков ${appliedWord} в ${dstName}`, "ok");
       document.dispatchEvent(new CustomEvent("playlists:changed"));
       await loadTracks();
     } catch (error) {

@@ -630,8 +630,8 @@ table.library img.thumb {
   border-radius: 99px;
 }
 
-/* push the source "open in service" link to the far right of the card */
-.track-card .open-link { margin-left: auto; }
+/* the link sits before the cover, so it must not be pushed to the far right */
+.track-card .open-link { align-self: flex-start; margin-top: 2px; }
 
 /* --- yandex device flow ----------------------------------------------- */
 
@@ -861,3 +861,77 @@ table.library td.muted-cell { color: #bbb; }
   vertical-align: middle;
   text-transform: uppercase;
 }
+
+/* --- export chooser ---------------------------------------------------- */
+
+.export-panel { max-width: 620px; }
+
+.export-step {
+  margin: 0 0 4px;
+  font-size: 0.78em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8a939e;
+}
+
+.export-step + .delivery-pick,
+.export-step + .services-row { margin-bottom: 18px; }
+
+.delivery-pick {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 9px;
+  background: #eef1f5;
+  gap: 2px;
+}
+
+.delivery {
+  padding: 7px 14px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #5c6673;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.delivery.active {
+  background: #fff;
+  color: #1a1f26;
+  box-shadow: 0 1px 3px rgba(20, 30, 45, 0.13);
+}
+
+.export-hint {
+  margin: 8px 0 0;
+  font-size: 0.86em;
+  color: #6d7783;
+  min-height: 1.3em;
+}
+
+.export-note {
+  margin: 16px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid #eceff3;
+  font-size: 0.82em;
+  color: #949ca6;
+}
+
+.service-pick small { color: #9aa3ad; font-size: 0.72em; }
+.service-pick small.muted { color: #c3c9d0; }
+
+/* emptying a service's likes is destructive, so it is not a blue button */
+.buttons button.clear-btn {
+  background: #fff;
+  color: #b3392f;
+  box-shadow: inset 0 0 0 1px #f0d3d0;
+  margin-left: auto;
+}
+
+.buttons button.clear-btn:hover:not(:disabled) {
+  background: #fdecea;
+  box-shadow: inset 0 0 0 1px #e7b6b1;
+}
+
+.buttons button.clear-btn:disabled { color: #d9c4c1; box-shadow: inset 0 0 0 1px #f3e6e4; }

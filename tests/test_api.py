@@ -14,6 +14,9 @@ class FakeClient:
     def __init__(self, results=None):
         self.results = results or []
         self.liked = []
+        self.unliked = []
+        self.created = []
+        self.added = []
 
     def get_liked_tracks(self):
         return [
@@ -36,7 +39,16 @@ class FakeClient:
         return len(ids)
 
     def unlike_tracks(self, ids):
-        return 0
+        self.unliked.extend(ids)
+        return len(ids)
+
+    def create_playlist(self, name, track_ids=()):
+        self.created.append({"name": name, "tracks": list(track_ids)})
+        return f"fake-playlist-{len(self.created)}"
+
+    def add_playlist_tracks(self, playlist_id, track_ids):
+        self.added.append({"playlist_id": playlist_id, "tracks": list(track_ids)})
+        return len(list(track_ids))
 
 
 @pytest.fixture
@@ -153,11 +165,17 @@ def test_export_needs_a_token_on_the_destination(client, youtube_import):
     assert "войдите" in response.json()["detail"].lower()
 
 
-def test_export_rejects_same_service(client, youtube_import):
+def test_export_to_the_same_service(client, fake, youtube_import):
+    """A liked library has to become a playlist somewhere. Same service is fine."""
+    client.post("/api/token/youtube", json={"value": "header-block"})
     response = client.post(
-        f"/api/export/{youtube_import}", json={"dst_service": "youtube"}
+        f"/api/export/{youtube_import}", json={"dst_service": "youtube", "delivery": "playlist"}
     )
-    assert response.status_code == 400
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["service"] == "youtube"
+    assert body["delivery"] == "playlist"
 
 
 def test_cannot_export_an_export(client, youtube_import):
@@ -188,7 +206,7 @@ def test_migrate_page_rejects_an_imported_playlist(client, youtube_import):
 def test_full_flow(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
     target_id = client.post(
-        f"/api/export/{youtube_import}", json={"dst_service": "yandex"}
+        f"/api/export/{youtube_import}", json={"dst_service": "yandex", "delivery": "likes"}
     ).json()["playlist_id"]
 
     src_track_id = client.get(f"/api/tracks?playlist_id={target_id}").json()["tracks"][0]["src_track_id"]
@@ -211,6 +229,7 @@ def test_full_flow(client, fake, youtube_import):
 
     applied = client.post(f"/api/apply?playlist_id={target_id}").json()
     assert applied["applied"] == 1
+    assert applied["sent"] == 1
     assert fake.liked == ["yt-1"], "exactly the picked track should be liked"
 
     stats = client.get(f"/api/apply/stats?playlist_id={target_id}").json()
@@ -220,7 +239,7 @@ def test_full_flow(client, fake, youtube_import):
 def test_apply_is_idempotent(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
     target_id = client.post(
-        f"/api/export/{youtube_import}", json={"dst_service": "yandex"}
+        f"/api/export/{youtube_import}", json={"dst_service": "yandex", "delivery": "likes"}
     ).json()["playlist_id"]
     src_track_id = client.get(f"/api/tracks?playlist_id={target_id}").json()["tracks"][0]["src_track_id"]
 
@@ -623,3 +642,119 @@ def test_local_answers_are_not_cached(client, fake, youtube_import):
     client.get(f"/api/candidates/{src_track_id}?playlist_id={target_id}")
 
     assert db.get_cached_search(src_track_id, "yandex") is None
+
+
+# --- export destinations --------------------------------------------------
+
+
+def test_export_rejects_an_unknown_delivery(client, imported):
+    client.post("/api/token/youtube", json={"value": "header-block"})
+    response = client.post(
+        f"/api/export/{imported[0]}", json={"dst_service": "youtube", "delivery": "telepathy"}
+    )
+    assert response.status_code == 400
+
+
+def test_playlist_delivery_builds_one_playlist_and_appends_to_it(client, fake, imported):
+    src_id, track_ids = imported
+    client.post("/api/token/youtube", json={"value": "header-block"})
+    target_id = client.post(
+        f"/api/export/{src_id}", json={"dst_service": "youtube", "delivery": "playlist"}
+    ).json()["playlist_id"]
+
+    for track_id in track_ids:
+        db.save_match(target_id, track_id, {"external_id": f"yt-{track_id}", "title": "X"}, 90)
+
+    first = client.post(f"/api/apply?playlist_id={target_id}&limit=2").json()
+    assert first["applied"] == 2
+    assert first["sent"] == 2
+    assert len(fake.created) == 1
+    assert fake.created[0]["tracks"] == [f"yt-{t}" for t in track_ids[:2]]
+    assert fake.created[0]["name"] == "Медиатека", "the playlist keeps the source name"
+    assert fake.liked == [], "playlist delivery must not like anything"
+
+    remote = client.get(f"/api/playlist/{target_id}").json()["playlist"]
+    assert remote["remote_playlist_id"] == "fake-playlist-1"
+
+    second = client.post(f"/api/apply?playlist_id={target_id}&limit=2").json()
+    assert second["applied"] == 1
+    assert len(fake.created) == 1, "a second batch appends instead of starting a new playlist"
+    assert fake.added == [{"playlist_id": "fake-playlist-1", "tracks": [f"yt-{track_ids[2]}"]}]
+
+
+def test_likes_delivery_never_creates_a_playlist(client, fake, imported):
+    src_id, track_ids = imported
+    client.post("/api/token/youtube", json={"value": "header-block"})
+    target_id = client.post(
+        f"/api/export/{src_id}", json={"dst_service": "youtube", "delivery": "likes"}
+    ).json()["playlist_id"]
+
+    db.save_match(target_id, track_ids[0], {"external_id": "yt-a", "title": "X"}, 90)
+    client.post(f"/api/apply?playlist_id={target_id}")
+
+    assert fake.liked == ["yt-a"]
+    assert fake.created == []
+
+
+def test_export_payload_carries_the_delivery(client, imported):
+    client.post("/api/token/youtube", json={"value": "header-block"})
+    target_id = client.post(
+        f"/api/export/{imported[0]}", json={"dst_service": "youtube", "delivery": "playlist"}
+    ).json()["playlist_id"]
+
+    playlist = client.get(f"/api/playlist/{target_id}").json()["playlist"]
+    assert playlist["delivery"] == "playlist"
+    assert playlist["remote_playlist_id"] is None
+
+
+# --- clearing a service's likes -------------------------------------------
+
+
+def test_clear_likes_empties_the_service(client, fake, monkeypatch):
+    monkeypatch.setattr("app.services.library_service.choose_api", lambda *a, **k: fake)
+    client.post("/api/token/youtube", json={"value": "header-block"})
+
+    response = client.post("/api/service/youtube/clear-likes")
+
+    assert response.json()["removed"] == 1
+    assert fake.unliked == ["yt-blue-monday"]
+
+
+def test_clear_likes_needs_a_token(client):
+    response = client.post("/api/service/youtube/clear-likes")
+    assert response.status_code == 400
+    assert "войдите" in response.json()["detail"].lower()
+
+
+def test_a_db_answer_can_be_chosen_without_a_cached_search(client, fake, youtube_import):
+    """Local candidates are not cached, so choosing one has to work anyway."""
+    client.post("/api/token/yandex", json={"value": "y0-token"})
+    db.create_playlist(
+        "yandex",
+        "Медиатека",
+        [{
+            "service": "yandex",
+            "external_id": "ya-blue-monday",
+            "title": "Blue Monday",
+            "artists": "New Order",
+            "album": None,
+            "thumbnail": None,
+            "duration_s": 450,
+        }],
+    )
+
+    target_id = _target(client, youtube_import)
+    src_track_id = client.get(f"/api/tracks?playlist_id={target_id}").json()["tracks"][0]["src_track_id"]
+
+    candidates = client.get(
+        f"/api/candidates/{src_track_id}?playlist_id={target_id}"
+    ).json()["candidates"]
+    assert db.get_cached_search(src_track_id, "yandex") is None
+
+    response = client.post(
+        f"/api/choose/{src_track_id}?playlist_id={target_id}",
+        json={"external_id": candidates[0]["external_id"]},
+    )
+
+    assert response.status_code == 200
+    assert client.get(f"/api/playlist/{target_id}").json()["playlist"]["chosen"] == 1

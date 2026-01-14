@@ -35,3 +35,11 @@ class BaseMusicApi(ABC):
     @abstractmethod
     def unlike_tracks(self, track_ids: Iterable[str]) -> int:
         """Remove tracks from the liked library. Returns how many were sent."""
+
+    @abstractmethod
+    def create_playlist(self, name: str, track_ids: Iterable[str] = ()) -> str:
+        """Create a playlist and add `track_ids` to it. Returns its remote id."""
+
+    @abstractmethod
+    def add_playlist_tracks(self, playlist_id: str, track_ids: Iterable[str]) -> int:
+        """Append tracks to an existing playlist. Returns how many were added."""

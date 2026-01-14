@@ -23,6 +23,7 @@ from app.services import (
     ApplyService,
     ImportService,
     MatchService,
+    clear_likes,
     create_target_playlist,
     yandex_auth,
 )
@@ -79,6 +80,8 @@ def _playlist_payload(playlist: sqlite3.Row) -> dict:
         "name": playlist["name"],
         "created_at": playlist["created_at"],
         "kind": db.playlist_kind(playlist),
+        "delivery": playlist["delivery"],
+        "remote_playlist_id": playlist["remote_playlist_id"],
         "source_playlist_id": playlist["source_playlist_id"],
         "source_name": source["name"] if source else None,
         "source_service": source["service"] if source else None,
@@ -155,6 +158,7 @@ def migrate_page(request: Request, playlist_id: int):
             "src_service": source["service"],
             "src_created_at": source["created_at"],
             "dst_service": playlist["service"],
+            "delivery": playlist["delivery"] or "likes",
             "src_name": FULL_NAME[source["service"]],
             "dst_name": FULL_NAME[playlist["service"]],
         }
@@ -269,12 +273,19 @@ def delete_playlist(playlist_id: int):
 
 class ExportPayload(BaseModel):
     dst_service: str
+    delivery: str = "playlist"
+    name: str | None = None
 
 
 @app.post("/api/export/{playlist_id}")
 def export_playlist(playlist_id: int, payload: ExportPayload):
     try:
-        result = create_target_playlist(playlist_id, payload.dst_service)
+        result = create_target_playlist(
+            playlist_id,
+            payload.dst_service,
+            delivery=payload.delivery,
+            name=payload.name,
+        )
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
@@ -331,6 +342,22 @@ def skip(src_track_id: int, playlist_id: int):
 
 
 # --- apply ----------------------------------------------------------------
+
+
+# --- service library ------------------------------------------------------
+
+
+@app.post("/api/service/{service}/clear-likes")
+def clear_service_likes(service: str):
+    """Empty the liked library on the service itself. Irreversible."""
+    svc = _service(service)
+    try:
+        return clear_likes(svc.value)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except Exception as exc:
+        logger.exception("Clearing likes failed for %s", svc.value)
+        raise _explain(exc, svc.value)
 
 
 @app.get("/api/apply/stats")

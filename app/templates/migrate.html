@@ -18,6 +18,7 @@
   data-dst="{{ dst_service }}"
   data-src-name="{{ src_name }}"
   data-dst-name="{{ dst_name }}"
+  data-delivery="{{ delivery }}"
 >
   <aside class="track-list">
     <header class="track-list-head">
@@ -70,11 +71,14 @@
     <footer class="apply-bar">
       <div class="apply-info">
         выбрано <strong id="apply-chosen">0</strong> ·
-        пролайкано <strong id="apply-applied">0</strong> ·
+        {% if delivery == "playlist" %}добавлено{% else %}пролайкано{% endif %}
+        <strong id="apply-applied">0</strong> ·
         пропущено <strong id="apply-skipped">0</strong> ·
         всего <strong id="apply-total">0</strong>
       </div>
-      <button class="btn" id="apply-btn" disabled>Лайкнуть выбранные в {{ dst_name }}</button>
+      <button class="btn" id="apply-btn" disabled>
+        {% if delivery == "playlist" %}Собрать плейлист в {{ dst_name }}{% else %}Лайкнуть выбранные в {{ dst_name }}{% endif %}
+      </button>
     </footer>
   </div>
 </section>

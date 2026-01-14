@@ -224,3 +224,28 @@ def test_pending_batch_keeps_source_order(imported):
 
     assert [row["position"] for row in batch] == [0, 1, 2]
     assert [row["dst_external_id"] for row in batch] == [f"yt-{t}" for t in track_ids]
+
+
+def test_delivery_defaults_to_likes_for_old_targets(imported):
+    """Targets created before the delivery column existed behaved as likes."""
+    src_id, _ = imported
+    dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
+
+    db._conn.execute("UPDATE playlists SET delivery = NULL WHERE id = ?", (dst_id,))  # noqa: SLF001
+    db._conn.commit()  # noqa: SLF001
+    db.init_db()  # runs the migration again
+
+    assert db.get_playlist(dst_id)["delivery"] == "likes"
+
+
+def test_remote_playlist_id_is_remembered(imported):
+    src_id, _ = imported
+    dst_id = db.create_playlist(
+        "youtube", "Экспорт", source_playlist_id=src_id, delivery="playlist"
+    )
+
+    assert db.get_playlist(dst_id)["remote_playlist_id"] is None
+
+    db.set_remote_playlist(dst_id, "PL123")
+
+    assert db.get_playlist(dst_id)["remote_playlist_id"] == "PL123"

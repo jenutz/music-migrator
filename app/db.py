@@ -46,7 +46,11 @@ CREATE TABLE IF NOT EXISTS playlists (
     service TEXT NOT NULL,
     name TEXT NOT NULL,
     created_at TEXT NOT NULL,
-    source_playlist_id INTEGER REFERENCES playlists(id) ON DELETE CASCADE
+    source_playlist_id INTEGER REFERENCES playlists(id) ON DELETE CASCADE,
+    -- targets only: 'likes' (like the tracks) or 'playlist' (build a playlist)
+    delivery TEXT,
+    -- remote playlist id once the destination playlist actually exists
+    remote_playlist_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS playlist_tracks (
@@ -127,6 +131,18 @@ def _migrate() -> None:
 
     if "source_playlist_id" not in _columns("playlists"):
         _conn.execute("ALTER TABLE playlists ADD COLUMN source_playlist_id INTEGER")
+
+    columns = _columns("playlists")
+    if "delivery" not in columns:
+        _conn.execute("ALTER TABLE playlists ADD COLUMN delivery TEXT")
+    if "remote_playlist_id" not in columns:
+        _conn.execute("ALTER TABLE playlists ADD COLUMN remote_playlist_id TEXT")
+
+    # every target that existed before this column was created liked its tracks
+    _conn.execute(
+        "UPDATE playlists SET delivery = 'likes'"
+        " WHERE source_playlist_id IS NOT NULL AND delivery IS NULL"
+    )
 
     # The old app had one hard-coded library name; the new one shows "Медиатека".
     _conn.execute(
@@ -255,14 +271,16 @@ def create_playlist(
     name: str,
     tracks: list[dict] | None = None,
     source_playlist_id: int | None = None,
+    delivery: str | None = None,
 ) -> int:
     """Create a playlist, optionally seeded with tracks (imported playlists)."""
     with _lock:
         try:
             cur = _conn.execute(
-                "INSERT INTO playlists (service, name, created_at, source_playlist_id) "
-                "VALUES (?, ?, ?, ?)",
-                (service, name, now(), source_playlist_id),
+                "INSERT INTO playlists "
+                "(service, name, created_at, source_playlist_id, delivery) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (service, name, now(), source_playlist_id, delivery),
             )
             playlist_id = int(cur.lastrowid)
 
@@ -297,6 +315,15 @@ def list_playlists(service: str | None = None) -> list[sqlite3.Row]:
             (service,),
         )
     return query("SELECT * FROM playlists ORDER BY created_at DESC, id DESC")
+
+
+def set_remote_playlist(playlist_id: int, remote_id: str) -> None:
+    with _lock:
+        _conn.execute(
+            "UPDATE playlists SET remote_playlist_id = ? WHERE id = ?",
+            (remote_id, playlist_id),
+        )
+        _conn.commit()
 
 
 def playlist_kind(playlist: sqlite3.Row) -> str:

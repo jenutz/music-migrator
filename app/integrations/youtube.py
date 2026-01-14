@@ -90,3 +90,18 @@ class YoutubeClient(BaseMusicApi):
         for track_id in track_ids:
             self.client.rate_song(track_id, "INDIFFERENT")
         return len(track_ids)
+
+    def create_playlist(self, name: str, track_ids=()) -> str:
+        video_ids = [str(t) for t in track_ids if t]
+        playlist_id = self.client.create_playlist(name, "", video_ids=video_ids or None)
+        if not isinstance(playlist_id, str):
+            # ytmusicapi returns an error dict instead of raising on some failures
+            raise RuntimeError(f"create_playlist failed: {playlist_id}")
+        return playlist_id
+
+    def add_playlist_tracks(self, playlist_id: str, track_ids) -> int:
+        video_ids = [str(t) for t in track_ids if t]
+        if not video_ids:
+            return 0
+        self.client.add_playlist_items(playlist_id, videoIds=video_ids, duplicates=False)
+        return len(video_ids)

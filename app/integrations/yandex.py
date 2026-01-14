@@ -67,3 +67,48 @@ class YandexClient(BaseMusicApi):
             return 0
         self.client.users_likes_tracks_remove(track_ids)
         return len(track_ids)
+
+    def _album_ids(self, track_ids: list[str]) -> dict[str, str]:
+        """Yandex will not insert a track into a playlist without its album id,
+        which the liked-library payload does not carry, so look them up."""
+        found = {}
+        try:
+            tracks = self.client.tracks(track_ids) or []
+        except Exception:
+            logger.exception("Could not resolve album ids for %s tracks", len(track_ids))
+            return found
+
+        for track in tracks:
+            album = track.albums[0] if track.albums else None
+            if album is not None:
+                found[str(track.id)] = str(album.id)
+        return found
+
+    def create_playlist(self, name: str, track_ids=()) -> str:
+        playlist = self.client.users_playlists_create(name, visibility="private")
+        if playlist is None or playlist.kind is None:
+            raise RuntimeError("users_playlists_create returned nothing")
+        playlist_id = str(playlist.kind)
+        if track_ids:
+            self.add_playlist_tracks(playlist_id, track_ids)
+        return playlist_id
+
+    def add_playlist_tracks(self, playlist_id: str, track_ids) -> int:
+        track_ids = [str(t) for t in track_ids if t]
+        if not track_ids:
+            return 0
+
+        playlist = self.client.users_playlists(playlist_id)
+        at = int(getattr(playlist, "track_count", 0) or 0)
+        albums = self._album_ids(track_ids)
+
+        sent = 0
+        for track_id in track_ids:
+            album_id = albums.get(track_id)
+            if not album_id:
+                logger.warning("Skipping %s: no album id, cannot insert", track_id)
+                continue
+            self.client.users_playlists_insert_track(playlist_id, track_id, album_id, at=at)
+            at += 1
+            sent += 1
+        return sent
