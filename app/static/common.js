@@ -50,4 +50,24 @@ export function escapeHtml(value) {
   }[char]));
 }
 
+const preloaded = new Set();
+
+// Ask the browser to fetch covers before the <img> tags are parsed/inserted.
+// The request is deduplicated with the later <img src>, so this only moves it
+// earlier - which is the difference between a cover appearing instantly and
+// appearing after the row is already on screen.
+export function preloadImages(urls) {
+  for (const url of urls) {
+    if (!url || preloaded.has(url)) continue;
+    preloaded.add(url);
+
+    const link = document.createElement("link");
+    link.rel = "preload";
+    link.as = "image";
+    link.fetchPriority = "high";
+    link.href = url;
+    document.head.appendChild(link);
+  }
+}
+
 export { $, $$ };

@@ -1,4 +1,4 @@
-import { $, $$, api, toast, formatWhen, formatDuration, escapeHtml } from "./common.js";
+import { $, $$, api, toast, formatWhen, formatDuration, escapeHtml, preloadImages } from "./common.js";
 
 const TRACK_URL = {
   yandex: (id) => `https://music.yandex.ru/track/${id}`,
@@ -226,16 +226,26 @@ function sortRows(rows, key, direction) {
   });
 }
 
-function cellHtml(row, key, service) {
+// Match rows carry src_thumbnail/dst_thumbnail, imported rows just thumbnail.
+function rowCover(row) {
+  return row.dst_thumbnail || row.thumbnail || row.src_thumbnail;
+}
+
+// The first screenful is what the eye lands on, so it loads eagerly; the rest
+// stays lazy so opening a 1900-track playlist does not fire 1900 requests.
+const EAGER_ROWS = 12;
+
+function cellHtml(row, key, service, eager = false) {
   const link = TRACK_URL[service] || (() => "#");
 
   switch (key) {
     case "position":
       return `<td class="idx">${row.position + 1}</td>`;
     case null: {
-      const cover = row.dst_thumbnail || row.thumbnail;
+      const cover = rowCover(row);
       return `<td class="cover">${cover
-        ? `<img class="thumb" src="${thumbUrl(cover)}" alt="" loading="lazy" decoding="async" width="48" height="48">`
+        ? `<img class="thumb" src="${thumbUrl(cover)}" alt="" decoding="async" width="48" height="48"
+             loading="${eager ? "eager" : "lazy"}" fetchpriority="${eager ? "high" : "auto"}">`
         : ""}</td>`;
     }
     case "duration_s":
@@ -291,9 +301,11 @@ function renderTable(container, { columns, rows, service }) {
     const next = sorted.slice(rendered, rendered + PAGE);
     if (!next.length) return;
 
-    tbody.insertAdjacentHTML("beforeend", next.map((row) => `
-      <tr>${columns.map((column) => cellHtml(row, column.key, service)).join("")}</tr>
+    tbody.insertAdjacentHTML("beforeend", next.map((row, index) => `
+      <tr>${columns.map((column) => cellHtml(row, column.key, service, rendered + index < EAGER_ROWS)).join("")}</tr>
     `).join(""));
+
+    preloadImages(next.slice(0, EAGER_ROWS).map((row) => thumbUrl(rowCover(row))));
     rendered += next.length;
 
     if (rendered >= sorted.length) stopObserving();

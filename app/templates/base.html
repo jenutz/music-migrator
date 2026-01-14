@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Music Migrator{% endblock %}</title>
+  <link rel="preconnect" href="https://avatars.yandex.net">
+  <link rel="preconnect" href="https://i.ytimg.com">
+  <link rel="preconnect" href="https://yt3.googleusercontent.com">
+  <link rel="dns-prefetch" href="https://avatars.yandex.net">
+  <link rel="dns-prefetch" href="https://i.ytimg.com">
+  <link rel="dns-prefetch" href="https://yt3.googleusercontent.com">
   <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v={{ time }}">
   <link rel="icon" type="image/x-icon" href="{{ url_for('static', path='favicon.ico') }}?v={{ time }}">
   {% block head %}{% endblock %}

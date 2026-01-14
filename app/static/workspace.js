@@ -1,4 +1,4 @@
-import { $, api, toast, formatWhen, formatDuration, escapeHtml } from "./common.js";
+import { $, api, toast, formatWhen, formatDuration, escapeHtml, preloadImages } from "./common.js";
 
 const workspace = $("#workspace");
 if (workspace) {
@@ -119,10 +119,12 @@ if (workspace) {
       note = `<div class="chosen-note skipped"><span class="chip skipped"></span> пропущено</div>`;
     }
 
+    preloadImages([cover(track.src_thumbnail, "100x100")]);
+
     els.sourceCard.innerHTML = `
       <a class="open-link" href="${trackLink(src, track.src_external_id)}"
          target="_blank" rel="noopener" title="Открыть в исходном сервисе">↗</a>
-      <img src="${cover(track.src_thumbnail, '100x100')}" alt="" loading="lazy"
+      <img src="${cover(track.src_thumbnail, '100x100')}" alt="" fetchpriority="high"
            decoding="async" onerror="this.style.visibility='hidden'">
       <div class="meta">
         <h4>${escapeHtml(track.src_title)}</h4>
@@ -147,6 +149,8 @@ if (workspace) {
       return;
     }
 
+    preloadImages(list.slice(0, 6).map((candidate) => cover(candidate.thumbnail, "100x100")));
+
     list.forEach((candidate, index) => {
       const li = document.createElement("li");
       const fromDb = candidate.origin === "db";
@@ -156,7 +160,8 @@ if (workspace) {
         : "";
       li.innerHTML = `
         <span class="badge">${index + 1}</span>
-        <img src="${cover(candidate.thumbnail, '100x100')}" alt="" loading="lazy"
+        <img src="${cover(candidate.thumbnail, '100x100')}" alt=""
+             loading="${index < 3 ? "eager" : "lazy"}" fetchpriority="${index < 3 ? "high" : "auto"}"
              decoding="async" onerror="this.style.visibility='hidden'">
         <div class="info">
           <h4>${escapeHtml(candidate.title)} ${origin}</h4>
