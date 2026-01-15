@@ -1,14 +1,6 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-
-# Virtual envs
-venv/
-.venv/
+# Everything local, machine-specific or obsolete lives in junk/ - one ignored
+# folder instead of a rule per artefact. See junk/README.md for what is in it.
+junk/
 
 # Local data + secrets (never commit tokens)
 data/
@@ -21,8 +13,19 @@ secrets/
 *.key
 
 # Scratch space
-shit/
 TODO
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Virtual envs
+venv/
+.venv/
 
 # IDE / OS
 .idea/

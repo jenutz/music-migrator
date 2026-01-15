@@ -16,15 +16,22 @@ imports; everything you review and apply happens inside a playlist.
 2. **Загрузить** snapshots that service's liked tracks into a new playlist,
    listed in the sidebar under the service with the date it was imported.
    Importing again creates another playlist instead of overwriting the old one.
-3. **Экспорт** on a playlist creates a *target* playlist on the other service.
-   Several targets can exist for the same source, each with its own choices.
+3. **Экспорт** on a playlist creates a *target* playlist. Pick where the tracks
+   should land — a **new playlist** on the destination service, or **into the
+   likes** — and which service, including the same one. Several targets can
+   exist for the same source, each with its own choices.
 4. In the target playlist: one source track at a time, searched on the other
    service by `title + artist` and ranked by a fuzzy score (title, artist,
    duration, and a small penalty for music videos). Pick one or skip; choices
    are saved immediately.
-5. Hit the apply button. It likes the chosen tracks on the destination in
-   source-playlist order, 50 at a time, and is safe to re-run — applied tracks
-   are marked so they are not sent twice. The sidebar row shows the progress.
+5. Hit the apply button. It sends the chosen tracks in source-playlist order,
+   50 at a time, and is safe to re-run — applied tracks are marked so they are
+   not sent twice. A playlist target creates the remote playlist on the first
+   batch and appends to it afterwards. The sidebar row shows the progress.
+
+Each service row also has **Очистить**, which empties that service's liked
+library. It asks you to type the service name, and it never touches the
+snapshots already imported here.
 
 Deleting a playlist cascades: dropping an import also drops the targets made
 from it, while deleting a target leaves the source alone.
@@ -47,6 +54,24 @@ Data lives in `data/app.db` (or `$DATA_DIR/app.db`). Compose bind-mounts
 `./data`, so the database is a normal file you own - open it with any sqlite
 client, copy it, and it survives `docker compose down -v`.
 
+## Layout
+
+```
+app/            the application
+  main.py       routes, payloads, error translation
+  db.py         schema + queries, raw sqlite3, no ORM
+  integrations/ one module per music service (+ the shared interface)
+  services/     import, export, matching, applying, auth, library clearing
+  templates/    jinja pages
+  static/       css, js, icons
+tests/          pytest, all offline
+data/           app.db + its WAL files (gitignored)
+junk/           obsolete local junk: old secrets, scratch scripts (gitignored)
+```
+
+Anything that is not part of the app goes into `junk/`, which is ignored as one
+folder instead of a rule per artefact. It is safe to delete wholesale.
+
 ## Tokens
 
 **Yandex Music** — press **Войти через Яндекс** in the sidebar: the app asks
@@ -59,7 +84,8 @@ pasted token still works as a fallback
 `/browse` request, copy the whole request header block and paste it in.
 Details: https://ytmusicapi.readthedocs.io/en/stable/setup/browser.html
 
-Neither token is written to the repo; `secrets/` and `data/` are gitignored.
+Neither token is written to the repo; tokens live in `data/app.db`, which is
+gitignored.
 The device flow also stores `refresh_token` and the expiry timestamp, but the
 `yandex-music` library does not refresh tokens on its own — when the token
 expires, run the login again.
@@ -71,9 +97,10 @@ pytest tests -q
 ```
 
 The HTTP tests stub out the service clients, so they run offline. They cover
-the scoring rules, playlist ordering, per-playlist scoping of choices, the
-chosen → applied transition, and that re-running apply does not double-like
-anything.
+the scoring rules, local-first matching, playlist ordering, per-playlist
+scoping of choices, the chosen → applied transition, both delivery modes
+(playlist vs likes), clearing a service's likes, and that re-running apply does
+not double-like anything.
 
 ## Known rough edges
 
