@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -18,6 +19,8 @@ _TMP_DIR = tempfile.mkdtemp(prefix="music-migrator-tests-")
 os.environ["DATA_DIR"] = _TMP_DIR
 
 from app import db  # noqa: E402  (import after DATA_DIR is set)
+from app.integrations.factory import reset_cache  # noqa: E402
+from app.main import app  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -67,3 +70,80 @@ def target(imported):
         "youtube", "Экспорт", source_playlist_id=src_playlist_id
     )
     return dst_playlist_id, track_ids
+
+
+class FakeClient:
+    """Stands in for a real service so tests stay offline and deterministic."""
+
+    def __init__(self, results=None):
+        self.results = results or []
+        self.liked = []
+        self.unliked = []
+        self.created = []
+        self.added = []
+
+    def get_liked_tracks(self):
+        return [
+            {
+                "service": "youtube",
+                "external_id": "yt-blue-monday",
+                "title": "Blue Monday",
+                "artists": "New Order",
+                "album": "Power, Corruption & Lies",
+                "thumbnail": None,
+                "duration_s": 450,
+            }
+        ]
+
+    def search(self, query, limit=10):
+        return self.results
+
+    def like_tracks(self, ids):
+        self.liked.extend(ids)
+        return len(ids)
+
+    def unlike_tracks(self, ids):
+        self.unliked.extend(ids)
+        return len(ids)
+
+    def create_playlist(self, name, track_ids=()):
+        self.created.append({"name": name, "tracks": list(track_ids)})
+        return f"fake-playlist-{len(self.created)}"
+
+    def add_playlist_tracks(self, playlist_id, track_ids):
+        self.added.append({"playlist_id": playlist_id, "tracks": list(track_ids)})
+        return len(list(track_ids))
+
+
+@pytest.fixture
+def client():
+    reset_cache()
+    with TestClient(app) as test_client:
+        yield test_client
+    reset_cache()
+
+
+@pytest.fixture
+def fake(monkeypatch):
+    fake_client = FakeClient(
+        results=[
+            {"service": "youtube", "external_id": "yt-1", "title": "Blue Monday",
+             "artists": "New Order", "album": "Power, Corruption & Lies",
+             "thumbnail": None, "duration_s": 450, "result_type": "song"},
+            {"service": "youtube", "external_id": "yt-2", "title": "Blue Monday (Live)",
+             "artists": "New Order", "album": None,
+             "thumbnail": None, "duration_s": 800, "result_type": "video"},
+        ]
+    )
+    monkeypatch.setattr("app.services.import_service.choose_api", lambda *a, **k: fake_client)
+    monkeypatch.setattr("app.services.match_service.choose_api", lambda *a, **k: fake_client)
+    monkeypatch.setattr("app.services.apply_service.choose_api", lambda *a, **k: fake_client)
+    return fake_client
+
+
+@pytest.fixture
+def youtube_import(client, fake):
+    """Log in to youtube and import, returning the new playlist id."""
+    client.post("/api/token/youtube", json={"value": "header-block"})
+    response = client.post("/api/import/youtube")
+    return response.json()["playlist_id"]
