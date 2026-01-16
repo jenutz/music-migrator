@@ -21,25 +21,19 @@ class BaseMusicApi(ABC):
     service: str = ""
 
     @abstractmethod
-    def get_liked_tracks(self) -> list[dict]:
-        """Return every track in the user's liked library, newest first."""
+    def get_liked_tracks(self) -> list[dict]: ...
 
     @abstractmethod
-    def search(self, query: str, limit: int = 10) -> list[dict]:
-        """Search the service for a free-text query and return track candidates."""
+    def search(self, query: str, limit: int = 10) -> list[dict]: ...
 
     @abstractmethod
-    def like_tracks(self, track_ids: Iterable[str]) -> int:
-        """Add tracks to the liked library. Returns how many were sent."""
+    def like_tracks(self, track_ids: Iterable[str]) -> int: ...
 
     @abstractmethod
-    def unlike_tracks(self, track_ids: Iterable[str]) -> int:
-        """Remove tracks from the liked library. Returns how many were sent."""
+    def unlike_tracks(self, track_ids: Iterable[str]) -> int: ...
 
     @abstractmethod
-    def create_playlist(self, name: str, track_ids: Iterable[str] = ()) -> str:
-        """Create a playlist and add `track_ids` to it. Returns its remote id."""
+    def create_playlist(self, name: str, track_ids: Iterable[str] = ()) -> str: ...
 
     @abstractmethod
-    def add_playlist_tracks(self, playlist_id: str, track_ids: Iterable[str]) -> int:
-        """Append tracks to an existing playlist. Returns how many were added."""
+    def add_playlist_tracks(self, playlist_id: str, track_ids: Iterable[str]) -> int: ...

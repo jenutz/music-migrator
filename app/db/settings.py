@@ -1,18 +1,17 @@
-"""Small key/value store: tokens, and whatever else is worth keeping."""
-
-from .core import _conn, _lock, query_one
+from .core import session
+from .models import Setting
 
 
 def get_setting(key: str, default: str | None = None) -> str | None:
-    row = query_one("SELECT value FROM settings WHERE key = ?", (key,))
-    return row["value"] if row else default
+    with session() as db_session:
+        row = db_session.get(Setting, key)
+        return row.value if row else default
 
 
 def set_setting(key: str, value: str) -> None:
-    with _lock:
-        _conn.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, value),
-        )
-        _conn.commit()
+    with session() as db_session:
+        row = db_session.get(Setting, key)
+        if row is None:
+            db_session.add(Setting(key=key, value=value))
+        else:
+            row.value = value

@@ -1,5 +1,3 @@
-"""Candidate search: cached answers, local-first matching, choosing one."""
-
 from app import db
 
 
@@ -27,9 +25,6 @@ def test_candidates_are_cached(client, fake, monkeypatch, youtube_import):
 
     client.get(f"/api/candidates/{src_track_id}?playlist_id={target_id}&refresh=true")
     assert len(searches) == 2, "refresh must bypass the cache"
-
-
-# --- local-first search ---------------------------------------------------
 
 
 def test_known_track_is_matched_from_the_database_without_a_request(client, fake, youtube_import):

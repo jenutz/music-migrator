@@ -1,5 +1,3 @@
-"""Smoke tests, playlist endpoints and the Yandex device-flow routes."""
-
 from app import db
 
 
@@ -43,9 +41,6 @@ def test_deleting_a_playlist_removes_it_from_the_list(client, youtube_import):
 def test_unknown_playlist_is_404(client):
     assert client.get("/api/playlist/9999").status_code == 404
     assert client.get("/api/tracks?playlist_id=9999").status_code == 404
-
-
-# --- yandex device flow endpoints ----------------------------------------
 
 
 def test_device_flow_status_starts_idle(client):

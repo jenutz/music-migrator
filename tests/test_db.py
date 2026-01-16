@@ -4,9 +4,9 @@ These check behaviour the app relies on (ordering, scoping, state transitions),
 not that sqlite echoes back what we just wrote.
 """
 
-import sqlite3
-
 import pytest
+from sqlalchemy import delete, update
+from sqlalchemy.exc import IntegrityError
 
 from app import db
 
@@ -16,20 +16,18 @@ def test_upsert_track_dedupes_by_service_and_external_id(track_factory):
 
     first = db.upsert_track(track)
     second = db.upsert_track({**track, "title": "Karma Police (Remastered)"})
-    db._conn.commit()  # noqa: SLF001
 
     assert first == second, "same (service, external_id) must reuse the row"
-    assert db.get_track(first)["title"] == "Karma Police (Remastered)"
+    assert db.get_track(first).title == "Karma Police (Remastered)"
 
 
 def test_upsert_track_keeps_services_apart(track_factory):
     yandex_id = db.upsert_track(track_factory(external_id="123", service="yandex"))
     youtube_id = db.upsert_track(track_factory(external_id="123", service="youtube"))
-    db._conn.commit()  # noqa: SLF001
 
     assert yandex_id != youtube_id, "ids collide across services"
-    assert db.get_track(yandex_id)["service"] == "yandex"
-    assert db.get_track(youtube_id)["service"] == "youtube"
+    assert db.get_track(yandex_id).service == "yandex"
+    assert db.get_track(youtube_id).service == "youtube"
 
 
 def test_playlist_order_survives_import(track_factory):
@@ -39,8 +37,8 @@ def test_playlist_order_survives_import(track_factory):
     playlist_id = db.create_playlist("yandex", "Медиатека", tracks)
     rows = db.playlist_tracks(playlist_id)
 
-    assert [row["title"] for row in rows] == titles
-    assert [row["position"] for row in rows] == [0, 1, 2]
+    assert [entry.track.title for entry in rows] == titles
+    assert [entry.position for entry in rows] == [0, 1, 2]
 
 
 def test_importing_twice_keeps_both_snapshots(imported, track_factory):
@@ -84,7 +82,7 @@ def test_chosen_match_moves_to_applied(imported):
     assert db.count_pending(src_id, dst_id) == 1
 
     match = db.get_match(dst_id, track_ids[0])
-    db.mark_applied(match["id"])
+    db.mark_applied(match.id)
 
     counts = db.match_counts(src_id, dst_id)
     assert (counts["chosen"], counts["applied"], counts["total"]) == (0, 1, 3)
@@ -100,8 +98,8 @@ def test_skip_overrides_previous_choice(imported):
     db.skip_match(dst_id, src)
 
     match = db.get_match(dst_id, src)
-    assert match["status"] == "skipped"
-    assert match["dst_external_id"] is None, "skipped tracks must not be applied later"
+    assert match.status == "skipped"
+    assert match.dst_external_id is None, "skipped tracks must not be applied later"
 
 
 def test_matches_are_scoped_per_target_playlist(imported):
@@ -113,8 +111,8 @@ def test_matches_are_scoped_per_target_playlist(imported):
     db.save_match(first, track_ids[0], {"external_id": "yt-1", "title": "X"}, score=50)
     db.skip_match(second, track_ids[0])
 
-    assert db.get_match(first, track_ids[0])["status"] == "chosen"
-    assert db.get_match(second, track_ids[0])["status"] == "skipped"
+    assert db.get_match(first, track_ids[0]).status == "chosen"
+    assert db.get_match(second, track_ids[0]).status == "skipped"
 
     assert db.match_counts(src_id, first)["chosen"] == 1
     assert db.match_counts(src_id, second)["skipped"] == 1
@@ -164,11 +162,10 @@ def test_deleting_unreferenced_track_cascades_to_matches(track_factory):
     src_id = db.create_playlist("yandex", "Медиатека", [])
     dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
     track_id = db.upsert_track(track_factory(title="Orphan", external_id="orphan-1"))
-    db._conn.commit()  # noqa: SLF001
     db.save_match(dst_id, track_id, {"external_id": "yt-9", "title": "Orphan"}, score=40)
 
-    db._conn.execute("DELETE FROM tracks WHERE id = ?", (track_id,))  # noqa: SLF001
-    db._conn.commit()  # noqa: SLF001
+    with db.session() as db_session:
+        db_session.execute(delete(db.Track).where(db.Track.id == track_id))
 
     assert db.get_match(dst_id, track_id) is None
 
@@ -176,8 +173,9 @@ def test_deleting_unreferenced_track_cascades_to_matches(track_factory):
 def test_track_used_by_playlist_cannot_be_deleted(imported):
     _, track_ids = imported
 
-    with pytest.raises(sqlite3.IntegrityError):
-        db._conn.execute("DELETE FROM tracks WHERE id = ?", (track_ids[0],))  # noqa: SLF001
+    with pytest.raises(IntegrityError):
+        with db.session() as db_session:
+            db_session.execute(delete(db.Track).where(db.Track.id == track_ids[0]))
 
 
 def test_search_cache_expires_on_refresh(imported):
@@ -207,7 +205,7 @@ def test_list_playlists_is_newest_first(imported, track_factory):
     first_id, _ = imported
     second_id = db.create_playlist("yandex", "Медиатека", [track_factory(title="Later")])
 
-    ids = [row["id"] for row in db.list_playlists("yandex")]
+    ids = [playlist.id for playlist in db.list_playlists("yandex")]
     assert ids[0] == second_id
     assert first_id in ids
 
@@ -231,11 +229,13 @@ def test_delivery_defaults_to_likes_for_old_targets(imported):
     src_id, _ = imported
     dst_id = db.create_playlist("youtube", "Экспорт", source_playlist_id=src_id)
 
-    db._conn.execute("UPDATE playlists SET delivery = NULL WHERE id = ?", (dst_id,))  # noqa: SLF001
-    db._conn.commit()  # noqa: SLF001
-    db.init_db()  # runs the migration again
+    with db.session() as db_session:
+        db_session.execute(
+            update(db.Playlist).where(db.Playlist.id == dst_id).values(delivery=None)
+        )
+    db.init_db()  # runs the backfill again
 
-    assert db.get_playlist(dst_id)["delivery"] == "likes"
+    assert db.get_playlist(dst_id).delivery == "likes"
 
 
 def test_remote_playlist_id_is_remembered(imported):
@@ -244,8 +244,8 @@ def test_remote_playlist_id_is_remembered(imported):
         "youtube", "Экспорт", source_playlist_id=src_id, delivery="playlist"
     )
 
-    assert db.get_playlist(dst_id)["remote_playlist_id"] is None
+    assert db.get_playlist(dst_id).remote_playlist_id is None
 
     db.set_remote_playlist(dst_id, "PL123")
 
-    assert db.get_playlist(dst_id)["remote_playlist_id"] == "PL123"
+    assert db.get_playlist(dst_id).remote_playlist_id == "PL123"

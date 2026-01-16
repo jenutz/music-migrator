@@ -1,13 +1,24 @@
-"""Matches: what a source track became on the destination.
-
-``src_playlist_id`` is the imported playlist, ``dst_playlist_id`` is the target
-created by exporting it. Every function takes both so nothing has to guess
-which playlist a match belongs to.
+"""``src_playlist_id`` is the imported playlist, ``dst_playlist_id`` is the
+target created by exporting it. Every function takes both so nothing has to
+guess which playlist a match belongs to.
 """
 
-import sqlite3
+from sqlalchemy import and_, delete, func, select
+from sqlalchemy.orm import Session
 
-from .core import _conn, _lock, now, query, query_one
+from .core import now, session
+from .models import Match, PlaylistTrack, Track
+
+_RANKED_STATUSES = ("chosen", "applied", "skipped")
+
+
+def _match_row(db_session: Session, dst_playlist_id: int, src_track_id: int) -> Match | None:
+    return db_session.scalar(
+        select(Match).where(
+            Match.dst_playlist_id == dst_playlist_id,
+            Match.src_track_id == src_track_id,
+        )
+    )
 
 
 def save_match(
@@ -17,139 +28,160 @@ def save_match(
     score: int | None,
     status: str = "chosen",
 ) -> None:
-    with _lock:
-        _conn.execute(
-            """
-            INSERT INTO matches (
-                dst_playlist_id, src_track_id, dst_external_id, dst_title, dst_artists,
-                dst_album, dst_thumbnail, dst_duration_s, score, status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(dst_playlist_id, src_track_id) DO UPDATE SET
-                dst_external_id = excluded.dst_external_id,
-                dst_title = excluded.dst_title,
-                dst_artists = excluded.dst_artists,
-                dst_album = excluded.dst_album,
-                dst_thumbnail = excluded.dst_thumbnail,
-                dst_duration_s = excluded.dst_duration_s,
-                score = excluded.score,
-                status = excluded.status,
-                created_at = excluded.created_at
-            """,
-            (
-                dst_playlist_id,
-                src_track_id,
-                track.get("external_id"),
-                track.get("title"),
-                track.get("artists"),
-                track.get("album"),
-                track.get("thumbnail"),
-                track.get("duration_s"),
-                score,
-                status,
-                now(),
-            ),
-        )
-        _conn.commit()
+    with session() as db_session:
+        match = _match_row(db_session, dst_playlist_id, src_track_id)
+        if match is None:
+            match = Match(dst_playlist_id=dst_playlist_id, src_track_id=src_track_id)
+            db_session.add(match)
+
+        match.dst_external_id = track.get("external_id")
+        match.dst_title = track.get("title")
+        match.dst_artists = track.get("artists")
+        match.dst_album = track.get("album")
+        match.dst_thumbnail = track.get("thumbnail")
+        match.dst_duration_s = track.get("duration_s")
+        match.score = score
+        match.status = status
+        match.created_at = now()
 
 
 def skip_match(dst_playlist_id: int, src_track_id: int) -> None:
-    with _lock:
-        _conn.execute(
-            """
-            INSERT INTO matches (dst_playlist_id, src_track_id, status, created_at)
-            VALUES (?, ?, 'skipped', ?)
-            ON CONFLICT(dst_playlist_id, src_track_id) DO UPDATE SET
-                dst_external_id = NULL,
-                status = 'skipped',
-                created_at = excluded.created_at
-            """,
-            (dst_playlist_id, src_track_id, now()),
-        )
-        _conn.commit()
+    with session() as db_session:
+        match = _match_row(db_session, dst_playlist_id, src_track_id)
+        if match is None:
+            match = Match(dst_playlist_id=dst_playlist_id, src_track_id=src_track_id)
+            db_session.add(match)
+
+        match.dst_external_id = None
+        match.status = "skipped"
+        match.created_at = now()
 
 
-def get_match(dst_playlist_id: int, src_track_id: int) -> sqlite3.Row | None:
-    return query_one(
-        "SELECT * FROM matches WHERE dst_playlist_id = ? AND src_track_id = ?",
-        (dst_playlist_id, src_track_id),
-    )
+def get_match(dst_playlist_id: int, src_track_id: int) -> Match | None:
+    with session() as db_session:
+        return _match_row(db_session, dst_playlist_id, src_track_id)
 
 
 def match_counts(src_playlist_id: int, dst_playlist_id: int) -> dict[str, int]:
-    row = query_one(
-        """
-        SELECT
-            COUNT(pt.id) AS total,
-            COALESCE(SUM(CASE WHEN m.status = 'chosen' THEN 1 ELSE 0 END), 0) AS chosen,
-            COALESCE(SUM(CASE WHEN m.status = 'applied' THEN 1 ELSE 0 END), 0) AS applied,
-            COALESCE(SUM(CASE WHEN m.status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped
-        FROM playlist_tracks pt
-        LEFT JOIN matches m
-            ON m.src_track_id = pt.track_id AND m.dst_playlist_id = ?
-        WHERE pt.playlist_id = ?
-        """,
-        (dst_playlist_id, src_playlist_id),
-    )
-    if not row:
-        return {"total": 0, "chosen": 0, "applied": 0, "skipped": 0}
-    return {key: int(row[key]) for key in ("total", "chosen", "applied", "skipped")}
+    with session() as db_session:
+        total = db_session.scalar(
+            select(func.count())
+            .select_from(PlaylistTrack)
+            .where(PlaylistTrack.playlist_id == src_playlist_id)
+        )
+        rows = db_session.execute(
+            select(Match.status, func.count())
+            .join(
+                PlaylistTrack,
+                and_(
+                    PlaylistTrack.track_id == Match.src_track_id,
+                    PlaylistTrack.playlist_id == src_playlist_id,
+                ),
+            )
+            .where(Match.dst_playlist_id == dst_playlist_id)
+            .group_by(Match.status)
+        ).all()
+
+    counts = {"total": int(total or 0), "chosen": 0, "applied": 0, "skipped": 0}
+    for status, count in rows:
+        if status in _RANKED_STATUSES:
+            counts[status] = int(count)
+    return counts
 
 
-def ordered_matches(src_playlist_id: int, dst_playlist_id: int) -> list[sqlite3.Row]:
-    return query(
-        """
-        SELECT pt.position, t.id AS src_track_id, t.title AS src_title,
-               t.artists AS src_artists, t.thumbnail AS src_thumbnail,
-               t.duration_s AS src_duration_s, t.external_id AS src_external_id,
-               m.id AS match_id, m.status, m.score, m.dst_external_id,
-               m.dst_title, m.dst_artists, m.dst_album, m.dst_thumbnail
-        FROM playlist_tracks pt
-        JOIN tracks t ON t.id = pt.track_id
-        LEFT JOIN matches m
-            ON m.src_track_id = t.id AND m.dst_playlist_id = ?
-        WHERE pt.playlist_id = ?
-        ORDER BY pt.position
-        """,
-        (dst_playlist_id, src_playlist_id),
-    )
+def ordered_matches(src_playlist_id: int, dst_playlist_id: int) -> list[dict]:
+    with session() as db_session:
+        rows = db_session.execute(
+            select(
+                PlaylistTrack.position,
+                Track.id.label("src_track_id"),
+                Track.title.label("src_title"),
+                Track.artists.label("src_artists"),
+                Track.thumbnail.label("src_thumbnail"),
+                Track.duration_s.label("src_duration_s"),
+                Track.external_id.label("src_external_id"),
+                Match.id.label("match_id"),
+                Match.status,
+                Match.score,
+                Match.dst_external_id,
+                Match.dst_title,
+                Match.dst_artists,
+                Match.dst_album,
+                Match.dst_thumbnail,
+            )
+            .select_from(PlaylistTrack)
+            .join(Track, Track.id == PlaylistTrack.track_id)
+            .outerjoin(
+                Match,
+                and_(
+                    Match.src_track_id == Track.id,
+                    Match.dst_playlist_id == dst_playlist_id,
+                ),
+            )
+            .where(PlaylistTrack.playlist_id == src_playlist_id)
+            .order_by(PlaylistTrack.position)
+        )
+        return [dict(row._mapping) for row in rows]
 
 
-def pending_batch(src_playlist_id: int, dst_playlist_id: int, limit: int) -> list[sqlite3.Row]:
-    return query(
-        """
-        SELECT m.id AS match_id, m.dst_external_id, t.title AS src_title,
-               t.artists AS src_artists, pt.position
-        FROM playlist_tracks pt
-        JOIN tracks t ON t.id = pt.track_id
-        JOIN matches m ON m.src_track_id = t.id AND m.dst_playlist_id = ?
-        WHERE pt.playlist_id = ? AND m.status = 'chosen'
-        ORDER BY pt.position
-        LIMIT ?
-        """,
-        (dst_playlist_id, src_playlist_id, limit),
-    )
+def pending_batch(src_playlist_id: int, dst_playlist_id: int, limit: int) -> list[dict]:
+    with session() as db_session:
+        rows = db_session.execute(
+            select(
+                Match.id.label("match_id"),
+                Match.dst_external_id,
+                Track.title.label("src_title"),
+                Track.artists.label("src_artists"),
+                PlaylistTrack.position,
+            )
+            .select_from(PlaylistTrack)
+            .join(Track, Track.id == PlaylistTrack.track_id)
+            .join(
+                Match,
+                and_(
+                    Match.src_track_id == Track.id,
+                    Match.dst_playlist_id == dst_playlist_id,
+                ),
+            )
+            .where(
+                PlaylistTrack.playlist_id == src_playlist_id,
+                Match.status == "chosen",
+            )
+            .order_by(PlaylistTrack.position)
+            .limit(limit)
+        )
+        return [dict(row._mapping) for row in rows]
 
 
 def count_pending(src_playlist_id: int, dst_playlist_id: int) -> int:
-    row = query_one(
-        """
-        SELECT COUNT(*) AS c
-        FROM playlist_tracks pt
-        JOIN matches m ON m.src_track_id = pt.track_id AND m.dst_playlist_id = ?
-        WHERE pt.playlist_id = ? AND m.status = 'chosen'
-        """,
-        (dst_playlist_id, src_playlist_id),
-    )
-    return int(row["c"]) if row else 0
+    with session() as db_session:
+        return int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(PlaylistTrack)
+                .join(
+                    Match,
+                    and_(
+                        Match.src_track_id == PlaylistTrack.track_id,
+                        Match.dst_playlist_id == dst_playlist_id,
+                    ),
+                )
+                .where(
+                    PlaylistTrack.playlist_id == src_playlist_id,
+                    Match.status == "chosen",
+                )
+            )
+            or 0
+        )
 
 
 def mark_applied(match_id: int) -> None:
-    with _lock:
-        _conn.execute("UPDATE matches SET status = 'applied' WHERE id = ?", (match_id,))
-        _conn.commit()
+    with session() as db_session:
+        match = db_session.get(Match, match_id)
+        if match:
+            match.status = "applied"
 
 
 def clear_matches(dst_playlist_id: int) -> None:
-    with _lock:
-        _conn.execute("DELETE FROM matches WHERE dst_playlist_id = ?", (dst_playlist_id,))
-        _conn.commit()
+    with session() as db_session:
+        db_session.execute(delete(Match).where(Match.dst_playlist_id == dst_playlist_id))

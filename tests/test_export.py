@@ -1,5 +1,3 @@
-"""Exporting an imported playlist into a target on either service."""
-
 
 def test_export_creates_a_target_playlist(client, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})

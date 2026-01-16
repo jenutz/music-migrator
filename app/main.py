@@ -1,12 +1,4 @@
-"""Music library migrator.
-
-Single-user app. Import a service's liked library into a playlist, review it
-against the other service, then like the chosen tracks. Playlists are the unit
-of work: every import creates one, every export creates a target one.
-"""
-
 import logging
-import sqlite3
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -46,9 +38,6 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 
 
-# --- helpers --------------------------------------------------------------
-
-
 def _service(value: str) -> MusicService:
     try:
         return MusicService(value)
@@ -56,42 +45,41 @@ def _service(value: str) -> MusicService:
         raise HTTPException(404, f"Unknown service: {value}")
 
 
-def _playlist(playlist_id: int) -> sqlite3.Row:
+def _playlist(playlist_id: int) -> db.Playlist:
     playlist = db.get_playlist(playlist_id)
     if not playlist:
         raise HTTPException(404, f"Unknown playlist {playlist_id}")
     return playlist
 
 
-def _target_playlist(playlist_id: int) -> sqlite3.Row:
+def _target_playlist(playlist_id: int) -> db.Playlist:
     playlist = _playlist(playlist_id)
-    if not playlist["source_playlist_id"]:
+    if not playlist.source_playlist_id:
         raise HTTPException(400, "Этот плейлист не является целью переноса")
     return playlist
 
 
-def _playlist_payload(playlist: sqlite3.Row) -> dict:
+def _playlist_payload(playlist: db.Playlist) -> dict:
     counts = db.playlist_counts(playlist)
-    source = db.get_playlist(playlist["source_playlist_id"]) if playlist["source_playlist_id"] else None
+    source = db.get_playlist(playlist.source_playlist_id) if playlist.source_playlist_id else None
     return {
-        "id": playlist["id"],
-        "service": playlist["service"],
-        "service_name": FULL_NAME.get(playlist["service"], playlist["service"]),
-        "name": playlist["name"],
-        "created_at": playlist["created_at"],
-        "kind": db.playlist_kind(playlist),
-        "delivery": playlist["delivery"],
-        "remote_playlist_id": playlist["remote_playlist_id"],
-        "source_playlist_id": playlist["source_playlist_id"],
-        "source_name": source["name"] if source else None,
-        "source_service": source["service"] if source else None,
-        "source_service_name": FULL_NAME.get(source["service"], source["service"]) if source else None,
-        "source_created_at": source["created_at"] if source else None,
+        "id": playlist.id,
+        "service": playlist.service,
+        "service_name": FULL_NAME.get(playlist.service, playlist.service),
+        "name": playlist.name,
+        "created_at": playlist.created_at,
+        "kind": playlist.kind,
+        "delivery": playlist.delivery,
+        "remote_playlist_id": playlist.remote_playlist_id,
+        "source_playlist_id": playlist.source_playlist_id,
+        "source_name": source.name if source else None,
+        "source_service": source.service if source else None,
+        "source_service_name": FULL_NAME.get(source.service, source.service) if source else None,
+        "source_created_at": source.created_at if source else None,
         **counts,
     }
 
 
-# Short instructions shown under the token field, per service.
 TOKEN_HELP = {
     "yandex": 'Токен: <a href="https://yandex-music.readthedocs.io/en/main/token.html" '
               'target="_blank" rel="noopener">инструкция</a>',
@@ -110,8 +98,7 @@ def dashboard_context() -> dict:
     }
 
 
-# Client libraries raise huge, opaque errors. Translate the common ones so the
-# UI can show a sentence instead of a wall of JSON.
+# Client libraries raise huge, opaque errors; translate the common ones.
 _AUTH_HINTS = (
     "twoColumnBrowseResultsRenderer",
     "signInEndpoint",
@@ -134,9 +121,6 @@ def _explain(exc: Exception, service: str) -> HTTPException:
     return HTTPException(502, f"{service}: {type(exc).__name__}: {text[:300]}")
 
 
-# --- pages ----------------------------------------------------------------
-
-
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     context = dashboard_context()
@@ -147,7 +131,7 @@ def index(request: Request):
 @app.get("/migrate/{playlist_id}", response_class=HTMLResponse)
 def migrate_page(request: Request, playlist_id: int):
     playlist = _target_playlist(playlist_id)
-    source = _playlist(playlist["source_playlist_id"])
+    source = _playlist(playlist.source_playlist_id)
 
     context = dashboard_context()
     context.update(
@@ -155,18 +139,15 @@ def migrate_page(request: Request, playlist_id: int):
             "time": int(time.time()),
             "playlist": playlist,
             "playlist_id": playlist_id,
-            "src_service": source["service"],
-            "src_created_at": source["created_at"],
-            "dst_service": playlist["service"],
-            "delivery": playlist["delivery"] or "likes",
-            "src_name": FULL_NAME[source["service"]],
-            "dst_name": FULL_NAME[playlist["service"]],
+            "src_service": source.service,
+            "src_created_at": source.created_at,
+            "dst_service": playlist.service,
+            "delivery": playlist.delivery or "likes",
+            "src_name": FULL_NAME[source.service],
+            "dst_name": FULL_NAME[playlist.service],
         }
     )
     return templates.TemplateResponse(request, "migrate.html", context)
-
-
-# --- tokens ---------------------------------------------------------------
 
 
 class TokenPayload(BaseModel):
@@ -196,9 +177,6 @@ def clear_token(service: str):
     return {"service": svc.value, "cleared": True}
 
 
-# --- yandex oauth device flow --------------------------------------------
-
-
 @app.post("/api/auth/yandex/start")
 def yandex_auth_start():
     """Begin the device flow. Returns at once; the page polls for the result."""
@@ -213,9 +191,6 @@ def yandex_auth_status():
 @app.post("/api/auth/yandex/cancel")
 def yandex_auth_cancel():
     return yandex_auth.cancel()
-
-
-# --- import ---------------------------------------------------------------
 
 
 @app.get("/api/status")
@@ -239,9 +214,6 @@ def import_library(service: str):
     return result
 
 
-# --- playlists ------------------------------------------------------------
-
-
 @app.get("/api/playlists")
 def playlists():
     return {"playlists": [_playlist_payload(p) for p in db.list_playlists()]}
@@ -254,12 +226,9 @@ def playlist_detail(playlist_id: int):
     payload = _playlist_payload(playlist)
 
     if payload["kind"] == "imported":
-        tracks = [dict(row) for row in db.playlist_tracks(playlist_id)]
+        tracks = [entry.as_dict() for entry in db.playlist_tracks(playlist_id)]
     else:
-        tracks = [
-            dict(row)
-            for row in db.ordered_matches(playlist["source_playlist_id"], playlist_id)
-        ]
+        tracks = db.ordered_matches(playlist.source_playlist_id, playlist_id)
 
     return {"playlist": payload, "tracks": tracks}
 
@@ -294,18 +263,13 @@ def export_playlist(playlist_id: int, payload: ExportPayload):
     return result
 
 
-# --- matching -------------------------------------------------------------
-
-
 @app.get("/api/tracks")
 def tracks(playlist_id: int):
     playlist = _target_playlist(playlist_id)
-    rows = db.ordered_matches(playlist["source_playlist_id"], playlist_id)
-    counts = db.match_counts(playlist["source_playlist_id"], playlist_id)
     return {
         "playlist": _playlist_payload(playlist),
-        "counts": counts,
-        "tracks": [dict(row) for row in rows],
+        "counts": db.match_counts(playlist.source_playlist_id, playlist_id),
+        "tracks": db.ordered_matches(playlist.source_playlist_id, playlist_id),
     }
 
 
@@ -318,7 +282,7 @@ def candidates(src_track_id: int, playlist_id: int, refresh: bool = False, query
         raise HTTPException(400, str(exc))
     except Exception as exc:
         logger.exception("Search failed")
-        raise _explain(exc, _playlist(playlist_id)["service"])
+        raise _explain(exc, _playlist(playlist_id).service)
 
 
 class ChoosePayload(BaseModel):
@@ -339,12 +303,6 @@ def skip(src_track_id: int, playlist_id: int):
         return MatchService(playlist_id).skip(src_track_id)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-
-
-# --- apply ----------------------------------------------------------------
-
-
-# --- service library ------------------------------------------------------
 
 
 @app.post("/api/service/{service}/clear-likes")
@@ -376,7 +334,7 @@ def apply(playlist_id: int, limit: int = 50):
         raise HTTPException(400, str(exc))
     except Exception as exc:
         logger.exception("Apply failed")
-        raise _explain(exc, _playlist(playlist_id)["service"])
+        raise _explain(exc, _playlist(playlist_id).service)
 
 
 @app.get("/health")

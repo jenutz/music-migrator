@@ -16,8 +16,6 @@ class YandexClient(BaseMusicApi):
         else:
             self.client = yandex_music.Client().init()
 
-    # --- normalization ---------------------------------------------------
-
     @staticmethod
     def _cover(album) -> str | None:
         """Albums occasionally come back without a cover, and the library
@@ -42,8 +40,6 @@ class YandexClient(BaseMusicApi):
             "thumbnail": cls._cover(album) if album else None,
             "duration_s": track.duration_ms // 1000 if track.duration_ms else None,
         }
-
-    # --- api -------------------------------------------------------------
 
     def get_liked_tracks(self) -> list[dict]:
         tracks = self.client.users_likes_tracks().fetch_tracks() or []

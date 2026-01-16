@@ -1,5 +1,3 @@
-"""Similarity scoring tests - the core of "is this the same recording?"."""
-
 import pytest
 
 from app.integrations.youtube import strip_tags

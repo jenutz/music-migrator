@@ -1,9 +1,3 @@
-"""Fetch a service's liked library and snapshot it as a new playlist.
-
-Every import creates a separate playlist, so you can keep yesterday's snapshot
-around while importing again.
-"""
-
 import logging
 
 from app import db
@@ -13,13 +7,10 @@ logger = logging.getLogger(__name__)
 
 IMPORTED_NAME = "Медиатека"
 
-# Keys the integrations may emit that we don't store.
 _TRACK_KEYS = ("service", "external_id", "title", "artists", "album", "thumbnail", "duration_s")
 
 
 class ImportService:
-    """Imports the liked library of one service into a new local playlist."""
-
     def __init__(self, service: str):
         self.service = service
 
@@ -68,6 +59,6 @@ class ImportService:
             "playlists": sum(
                 1
                 for playlist in db.list_playlists(service)
-                if db.playlist_kind(playlist) == "imported"
+                if playlist.kind == "imported"
             ),
         }

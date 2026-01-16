@@ -4,6 +4,9 @@ jinja2==3.1.6
 pydantic==2.12.5
 python-multipart==0.0.20
 
+# Storage
+sqlalchemy==2.0.55
+
 # Music service clients
 yandex-music==3.2.2
 ytmusicapi==1.11.4

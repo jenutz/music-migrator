@@ -1,5 +1,3 @@
-"""Push the chosen matches of one target playlist to the destination service."""
-
 import logging
 
 from app import db
@@ -12,43 +10,38 @@ BATCH_SIZE = 50
 
 
 class ApplyService:
-    """Delivers every chosen track of a target playlist, in source playlist order.
-
-    Two ways to deliver: like them (``likes``) or build a playlist on the
-    destination service (``playlist``). The latter creates the remote playlist
-    on the first batch and appends to it afterwards, so an interrupted run
-    resumes into the same playlist instead of making a second one.
-    """
+    """Playlist delivery creates the remote playlist on the first batch and
+    appends afterwards, so an interrupted run does not start a second one."""
 
     def __init__(self, dst_playlist_id: int):
         playlist = db.get_playlist(dst_playlist_id)
         if not playlist:
             raise ValueError(f"Unknown playlist {dst_playlist_id}")
-        if not playlist["source_playlist_id"]:
+        if not playlist.source_playlist_id:
             raise ValueError(f"Playlist {dst_playlist_id} is not a migration target")
 
         self.playlist = playlist
-        self.playlist_id = int(playlist["id"])
-        self.dst_service = playlist["service"]
-        self.src_playlist_id = int(playlist["source_playlist_id"])
-        self.delivery = playlist["delivery"] or "likes"
+        self.playlist_id = playlist.id
+        self.dst_service = playlist.service
+        self.src_playlist_id = playlist.source_playlist_id
+        self.delivery = playlist.delivery or "likes"
 
     def stats(self) -> dict:
         counts = db.match_counts(self.src_playlist_id, self.playlist_id)
         counts["playlist_id"] = self.playlist_id
         counts["pending"] = db.count_pending(self.src_playlist_id, self.playlist_id)
         counts["delivery"] = self.delivery
-        counts["remote_playlist_id"] = self.playlist["remote_playlist_id"]
+        counts["remote_playlist_id"] = self.playlist.remote_playlist_id
         return counts
 
     def _deliver_to_playlist(self, client, ids: list[str]) -> int:
         # Re-read: an earlier batch may have created the remote playlist.
-        remote_id = db.get_playlist(self.playlist_id)["remote_playlist_id"]
+        remote_id = db.get_playlist(self.playlist_id).remote_playlist_id
 
         if remote_id:
             return client.add_playlist_tracks(remote_id, ids)
 
-        remote_id = client.create_playlist(self.playlist["name"], ids)
+        remote_id = client.create_playlist(self.playlist.name, ids)
         db.set_remote_playlist(self.playlist_id, remote_id)
         logger.info("Created playlist %s on %s", remote_id, self.dst_service)
         return len(ids)

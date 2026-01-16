@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -25,11 +26,11 @@ from app.main import app  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def clean_database():
-    """Start every test from an empty schema."""
     db.init_db()
-    for table in ("matches", "search_cache", "playlist_tracks", "playlists", "tracks", "settings"):
-        db._conn.execute(f"DELETE FROM {table}")  # noqa: SLF001 - test helper
-    db._conn.commit()  # noqa: SLF001
+    # child rows first, or the foreign keys complain
+    with db.session() as db_session:
+        for model in (db.Match, db.SearchCache, db.PlaylistTrack, db.Playlist, db.Track, db.Setting):
+            db_session.execute(delete(model))
     yield
 
 
@@ -58,7 +59,7 @@ def imported(track_factory):
         track_factory(title="Sweet Dreams", artists="Eurythmics"),
     ]
     playlist_id = db.create_playlist("yandex", "Медиатека", tracks)
-    ids = [row["id"] for row in db.playlist_tracks(playlist_id)]
+    ids = [entry.track_id for entry in db.playlist_tracks(playlist_id)]
     return playlist_id, ids
 
 
@@ -73,8 +74,6 @@ def target(imported):
 
 
 class FakeClient:
-    """Stands in for a real service so tests stay offline and deterministic."""
-
     def __init__(self, results=None):
         self.results = results or []
         self.liked = []

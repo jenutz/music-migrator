@@ -1,31 +1,32 @@
-"""Search results kept per (source track, destination service)."""
-
 import json
 
-from .core import _conn, _lock, now, query_one
+from sqlalchemy import delete, select
+
+from .core import now, session
+from .models import SearchCache
 
 
 def get_cached_search(src_track_id: int, dst_service: str) -> list[dict] | None:
-    row = query_one(
-        "SELECT payload FROM search_cache WHERE src_track_id = ? AND dst_service = ?",
-        (src_track_id, dst_service),
-    )
-    return json.loads(row["payload"]) if row else None
+    with session() as db_session:
+        row = db_session.scalar(
+            select(SearchCache).where(
+                SearchCache.src_track_id == src_track_id,
+                SearchCache.dst_service == dst_service,
+            )
+        )
+        return json.loads(row.payload) if row else None
 
 
 def set_cached_search(src_track_id: int, dst_service: str, payload: list[dict]) -> None:
-    with _lock:
-        _conn.execute(
-            "INSERT INTO search_cache (src_track_id, dst_service, payload, created_at) "
-            "VALUES (?, ?, ?, ?) "
-            "ON CONFLICT(src_track_id, dst_service) DO UPDATE SET "
-            "payload = excluded.payload, created_at = excluded.created_at",
-            (src_track_id, dst_service, json.dumps(payload), now()),
-        )
-        _conn.commit()
+    with session() as db_session:
+        row = db_session.get(SearchCache, (src_track_id, dst_service))
+        if row is None:
+            row = SearchCache(src_track_id=src_track_id, dst_service=dst_service)
+            db_session.add(row)
+        row.payload = json.dumps(payload)
+        row.created_at = now()
 
 
 def clear_cached_search(dst_service: str) -> None:
-    with _lock:
-        _conn.execute("DELETE FROM search_cache WHERE dst_service = ?", (dst_service,))
-        _conn.commit()
+    with session() as db_session:
+        db_session.execute(delete(SearchCache).where(SearchCache.dst_service == dst_service))

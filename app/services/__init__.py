@@ -1,8 +1,3 @@
-"""Business logic layer.
-
-Kept free of FastAPI/template concerns so it can be reused from a CLI.
-"""
-
 from app.services.apply_service import ApplyService
 from app.services.auth_service import YandexDeviceAuth, yandex_auth
 from app.services.export_service import create_target_playlist

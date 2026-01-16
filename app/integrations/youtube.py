@@ -20,7 +20,7 @@ _NOISE_WORDS = re.compile(
 
 
 def strip_tags(title: str) -> str:
-    """Remove '(Official Video)', 'Remastered 2011' and friends from a title."""
+    """Drop the "(Official Video)" / "Remastered 2011" noise from a title."""
     result = title or ""
     for pattern in _NOISE_PATTERNS:
         result = re.sub(pattern, "", result, flags=re.IGNORECASE)
@@ -37,8 +37,6 @@ class YoutubeClient(BaseMusicApi):
             self.client = ytmusicapi.YTMusic(auth)
         else:
             self.client = ytmusicapi.YTMusic()
-
-    # --- normalization ---------------------------------------------------
 
     @staticmethod
     def _biggest_thumbnail(thumbnails) -> str | None:
@@ -64,8 +62,6 @@ class YoutubeClient(BaseMusicApi):
             "duration_s": int(duration) if duration else None,
             "result_type": result_type or track.get("resultType"),
         }
-
-    # --- api -------------------------------------------------------------
 
     def get_liked_tracks(self) -> list[dict]:
         tracks = self.client.get_liked_songs(limit=10000).get("tracks", [])

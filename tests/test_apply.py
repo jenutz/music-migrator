@@ -1,5 +1,3 @@
-"""Reviewing a target playlist and sending the chosen tracks."""
-
 
 def test_full_flow(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})

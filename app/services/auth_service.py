@@ -1,13 +1,6 @@
-"""Yandex OAuth Device Flow.
-
-``yandex-music`` can fetch its own OAuth token: it prints a short user code,
-waits until that code is confirmed on the Yandex page, and returns an
-``OAuthToken``. The call blocks until the user confirms (or the flow times out),
-so it runs in a daemon thread and the browser polls for the result.
-
-The library never persists the token, so we do it: the access token goes into
-the ``settings`` table under the same key the manual paste path uses, which
-means the rest of the app does not care where the token came from.
+"""The library's device_auth() blocks until the user confirms, so it runs in a
+daemon thread and the browser polls. The token is written to ``settings`` under
+the same key the manual paste path uses.
 """
 
 from __future__ import annotations
@@ -39,7 +32,6 @@ EXPIRES_KEY = "yandex-token-expires-at"
 
 
 def _describe(exc: Exception) -> str:
-    """Short, user-facing reason instead of a wall of library internals."""
     text = str(exc).strip() or exc.__class__.__name__
 
     if "Network is unreachable" in text or "Connection" in text:
@@ -52,16 +44,12 @@ def _describe(exc: Exception) -> str:
 
 
 class YandexDeviceAuth:
-    """State machine behind the "Войти через Яндекс" button."""
-
     def __init__(self, client_factory: Callable[[], "yandex_music.Client"] | None = None):
         self._client_factory = client_factory or yandex_music.Client
         self._lock = threading.RLock()
         self._cancel = threading.Event()
         self._thread: threading.Thread | None = None
         self._state = self._idle()
-
-    # --- state ------------------------------------------------------------
 
     @staticmethod
     def _idle() -> dict:
@@ -83,10 +71,7 @@ class YandexDeviceAuth:
         with self._lock:
             return dict(self._state)
 
-    # --- control ----------------------------------------------------------
-
     def start(self) -> dict:
-        """Kick off the flow. Returns immediately with state ``pending``."""
         with self._lock:
             if self._state["state"] == "pending":
                 return dict(self._state)
@@ -109,13 +94,10 @@ class YandexDeviceAuth:
             return dict(self._state)
 
     def reset(self) -> dict:
-        """Forget any previous outcome (used when the token is removed)."""
         self._cancel.set()
         with self._lock:
             self._state = self._idle()
             return dict(self._state)
-
-    # --- worker -----------------------------------------------------------
 
     def _on_code(self, code) -> None:
         self._update(

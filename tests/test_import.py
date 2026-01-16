@@ -1,5 +1,3 @@
-"""Logging in and importing a liked library."""
-
 from app import db
 
 
@@ -33,9 +31,9 @@ def test_import_creates_a_playlist(client, fake):
     assert body["imported"] == 1
 
     playlist = db.get_playlist(body["playlist_id"])
-    assert playlist["service"] == "youtube"
-    assert playlist["source_playlist_id"] is None
-    assert db.playlist_tracks(playlist["id"])[0]["title"] == "Blue Monday"
+    assert playlist.service == "youtube"
+    assert playlist.source_playlist_id is None
+    assert db.playlist_tracks(playlist.id)[0].track.title == "Blue Monday"
 
 
 def test_each_import_is_a_separate_playlist(client, fake):

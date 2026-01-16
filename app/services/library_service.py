@@ -1,5 +1,3 @@
-"""Operations on a service's own liked library, not on our copies of it."""
-
 import logging
 
 from app import db

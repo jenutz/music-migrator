@@ -1,10 +1,7 @@
-"""Candidate search + similarity scoring, scoped to one target playlist."""
-
 import difflib
 import functools
 import logging
 import re
-import sqlite3
 
 from app import db
 from app.integrations.factory import choose_api
@@ -60,8 +57,6 @@ def score_track(source: dict, candidate: dict) -> int:
 
 
 class MatchService:
-    """Works on one target playlist: search, choose, skip."""
-
     LOCAL_GOOD_ENOUGH = 88
     LOCAL_MIN_SCORE = 45
     LOCAL_SPREAD = 15
@@ -71,23 +66,21 @@ class MatchService:
         playlist = db.get_playlist(dst_playlist_id)
         if not playlist:
             raise ValueError(f"Unknown playlist {dst_playlist_id}")
-        if not playlist["source_playlist_id"]:
+        if not playlist.source_playlist_id:
             raise ValueError(f"Playlist {dst_playlist_id} is not a migration target")
 
         self.playlist = playlist
-        self.playlist_id = int(playlist["id"])
-        self.dst_service = playlist["service"]
-        self.src_playlist_id = int(playlist["source_playlist_id"])
+        self.playlist_id = playlist.id
+        self.dst_service = playlist.service
+        self.src_playlist_id = playlist.source_playlist_id
 
-    # --- candidates ------------------------------------------------------
-
-    def _local_candidates(self, source: sqlite3.Row) -> list[dict]:
+    def _local_candidates(self, source: db.Track) -> list[dict]:
         """Ids from here are likeable without a round trip."""
-        scorer_input = dict(source)
+        scorer_input = source.as_dict()
         found = []
 
         for row in db.tracks_for_service(self.dst_service):
-            candidate = dict(row)
+            candidate = row.as_dict()
             candidate["score"] = score_track(scorer_input, candidate)
             if candidate["score"] >= self.LOCAL_MIN_SCORE:
                 candidate["origin"] = "db"
@@ -130,25 +123,23 @@ class MatchService:
 
         if local and local[0]["score"] >= self.LOCAL_GOOD_ENOUGH and not refresh:
             # not cached: it is a view of the library as it is right now
-            logger.info("Answered %r from the local library", source["title"])
+            logger.info("Answered %r from the local library", source.title)
             return local
 
         token = db.get_setting(f"token-{self.dst_service}")
         client = choose_api(self.dst_service, token)
-        search_query = query or f"{source['title']} {source['artists']}"
+        search_query = query or f"{source.title} {source.artists}"
 
         logger.info("Searching %s for %r", self.dst_service, search_query)
         remote = client.search(search_query, limit=10)
 
         for result in remote:
-            result["score"] = score_track(dict(source), result)
+            result["score"] = score_track(source.as_dict(), result)
             result["origin"] = "search"
 
         results = self._merge(local, remote)
         db.set_cached_search(src_track_id, self.dst_service, results)
         return results
-
-    # --- choices ---------------------------------------------------------
 
     def choose(self, src_track_id: int, candidate: dict) -> dict:
         source = db.get_track(src_track_id)
@@ -166,7 +157,6 @@ class MatchService:
         return {"src_track_id": src_track_id, "status": "chosen"}
 
     def choose_by_id(self, src_track_id: int, external_id: str) -> dict:
-        """Pick a candidate the UI showed, by its external id."""
         for candidate in db.get_cached_search(src_track_id, self.dst_service) or []:
             if candidate.get("external_id") == external_id:
                 return self.choose(src_track_id, candidate)
@@ -188,7 +178,16 @@ class MatchService:
         return {"src_track_id": src_track_id, "status": "skipped"}
 
     def build_target(self, src_track_id: int) -> dict:
-        """Attach the stored match to a source track, for rendering."""
         source = db.get_track(src_track_id)
         match = db.get_match(self.playlist_id, src_track_id)
-        return {"source": dict(source) if source else None, "match": dict(match) if match else None}
+        return {
+            "source": source.as_dict() if source else None,
+            "match": {
+                "status": match.status,
+                "score": match.score,
+                "external_id": match.dst_external_id,
+                "title": match.dst_title,
+            }
+            if match
+            else None,
+        }

@@ -4,7 +4,8 @@ Moves a liked-tracks library from one music service to another.
 
 I had this sitting half-finished for about six months, so it got rebuilt on
 SQLite with no user accounts — it is a one-person tool, so pretending it needed
-a users table was just cost.
+a users table was just cost. The storage layer is SQLAlchemy 2 with mapped
+classes; the tables are all there is, no service/repository tier on top.
 
 ## How it works
 
@@ -59,7 +60,10 @@ client, copy it, and it survives `docker compose down -v`.
 ```
 app/            the application
   main.py       routes, payloads, error translation
-  db.py         schema + queries, raw sqlite3, no ORM
+  db/           SQLAlchemy models + a module of queries per subject
+    models.py   the six mapped classes
+    core.py     engine, sessions, init
+    playlists.py, matches.py, tracks.py, cache.py, settings.py
   integrations/ one module per music service (+ the shared interface)
   services/     import, export, matching, applying, auth, library clearing
   templates/    jinja pages
@@ -111,5 +115,8 @@ not double-like anything.
   were chosen in it.
 - Search results are cached per track, so re-searching after editing the query
   is explicit (`Search` button / `refresh=true`) rather than automatic.
+- No Alembic: the app has one database, so schema changes so far were applied
+  by hand and `init_db()` only backfills data. Adding a column means doing it
+  twice — in `models.py` and in the existing file.
 - Duration heuristics assume the two services agree on track length — live and
   extended versions need a manual pick.

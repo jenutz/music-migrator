@@ -1,42 +1,40 @@
-"""The catalogue of every track we have ever seen, per service."""
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-import sqlite3
+from .core import session
+from .models import Track
 
-from .core import _conn, query, query_one
+
+def _upsert(db_session: Session, track: dict) -> Track:
+    service = track["service"]
+    external_id = str(track["external_id"])
+
+    row = db_session.scalar(
+        select(Track).where(Track.service == service, Track.external_id == external_id)
+    )
+    if row is None:
+        row = Track(service=service, external_id=external_id)
+        db_session.add(row)
+
+    row.title = track.get("title") or ""
+    row.artists = track.get("artists")
+    row.album = track.get("album")
+    row.thumbnail = track.get("thumbnail")
+    row.duration_s = track.get("duration_s")
+    db_session.flush()
+    return row
 
 
 def upsert_track(track: dict) -> int:
-    """Insert or update one track, return its local id. Caller commits."""
-    _conn.execute(
-        """
-        INSERT INTO tracks (service, external_id, title, artists, album, thumbnail, duration_s)
-        VALUES (:service, :external_id, :title, :artists, :album, :thumbnail, :duration_s)
-        ON CONFLICT(service, external_id) DO UPDATE SET
-            title = excluded.title,
-            artists = excluded.artists,
-            album = excluded.album,
-            thumbnail = excluded.thumbnail,
-            duration_s = excluded.duration_s
-        """,
-        track,
-    )
-    row = _conn.execute(
-        "SELECT id FROM tracks WHERE service = ? AND external_id = ?",
-        (track["service"], track["external_id"]),
-    ).fetchone()
-    return int(row["id"])
+    with session() as db_session:
+        return _upsert(db_session, track).id
 
 
-def get_track(track_id: int) -> sqlite3.Row | None:
-    return query_one("SELECT * FROM tracks WHERE id = ?", (track_id,))
+def get_track(track_id: int) -> Track | None:
+    with session() as db_session:
+        return db_session.get(Track, track_id)
 
 
-def tracks_for_service(service: str) -> list[sqlite3.Row]:
-    return query(
-        """
-        SELECT service, external_id, title, artists, album, thumbnail, duration_s
-        FROM tracks
-        WHERE service = ?
-        """,
-        (service,),
-    )
+def tracks_for_service(service: str) -> list[Track]:
+    with session() as db_session:
+        return list(db_session.scalars(select(Track).where(Track.service == service)))

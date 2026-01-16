@@ -1,21 +1,5 @@
-"""SQLite data layer, split by subject.
-
-Kept as a package purely for reading order - call sites still do
-``db.get_playlist(...)``, because everything is re-exported here.
-"""
-
 from .cache import clear_cached_search, get_cached_search, set_cached_search
-from .core import (
-    DB_PATH,
-    DATA_DIR,
-    SCHEMA,
-    _conn,
-    _lock,
-    init_db,
-    now,
-    query,
-    query_one,
-)
+from .core import DB_PATH, DATA_DIR, engine, init_db, now, session
 from .matches import (
     clear_matches,
     count_pending,
@@ -27,6 +11,7 @@ from .matches import (
     save_match,
     skip_match,
 )
+from .models import Base, Match, Playlist, PlaylistTrack, SearchCache, Setting, Track
 from .playlists import (
     create_playlist,
     delete_playlist,
@@ -42,16 +27,21 @@ from .settings import get_setting, set_setting
 from .tracks import get_track, tracks_for_service, upsert_track
 
 __all__ = [
+    "Base",
     "DB_PATH",
-    "_conn",
-    "_lock",
     "DATA_DIR",
-    "SCHEMA",
+    "Match",
+    "Playlist",
+    "PlaylistTrack",
+    "SearchCache",
+    "Setting",
+    "Track",
     "clear_cached_search",
     "clear_matches",
     "count_pending",
     "create_playlist",
     "delete_playlist",
+    "engine",
     "get_cached_search",
     "get_match",
     "get_playlist",
@@ -68,9 +58,8 @@ __all__ = [
     "playlist_kind",
     "playlist_track_count",
     "playlist_tracks",
-    "query",
-    "query_one",
     "save_match",
+    "session",
     "set_cached_search",
     "set_remote_playlist",
     "set_setting",

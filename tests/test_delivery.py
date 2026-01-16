@@ -1,5 +1,3 @@
-"""Where applied tracks land, and emptying a service's likes."""
-
 from app import db
 
 
@@ -42,9 +40,6 @@ def test_likes_delivery_never_creates_a_playlist(client, fake, imported):
 
     assert fake.liked == ["yt-a"]
     assert fake.created == []
-
-
-# --- clearing a service's likes -------------------------------------------
 
 
 def test_clear_likes_empties_the_service(client, fake, monkeypatch):

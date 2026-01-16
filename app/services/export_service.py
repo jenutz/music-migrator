@@ -1,5 +1,3 @@
-"""Turn an imported playlist into a target playlist."""
-
 import logging
 
 from app import db
@@ -9,7 +7,6 @@ logger = logging.getLogger(__name__)
 
 EXPORTED_NAME = "Экспорт"
 
-# where the chosen tracks end up on the destination service
 DELIVERIES = ("likes", "playlist")
 
 
@@ -19,15 +16,12 @@ def create_target_playlist(
     delivery: str = "likes",
     name: str | None = None,
 ) -> dict:
-    """Create a playlist on `dst_service` that will be filled from the source.
-
-    `dst_service` may be the source's own service: that is how a liked library
-    becomes a real playlist (or the other way round) without leaving the app.
-    """
+    """`dst_service` may be the source's own service: that is how a liked
+    library becomes a real playlist without leaving the app."""
     source = db.get_playlist(src_playlist_id)
     if not source:
         raise ValueError(f"Unknown playlist {src_playlist_id}")
-    if source["source_playlist_id"]:
+    if source.source_playlist_id:
         raise ValueError("Нельзя экспортировать уже экспортированный плейлист")
 
     service = MusicService(dst_service).value
@@ -41,7 +35,7 @@ def create_target_playlist(
     # targets by date, so it does not need to be the local row label.
     playlist_id = db.create_playlist(
         service=service,
-        name=name or source["name"],
+        name=name or source.name,
         tracks=None,
         source_playlist_id=src_playlist_id,
         delivery=delivery,
