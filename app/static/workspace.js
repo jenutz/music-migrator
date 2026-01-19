@@ -8,8 +8,8 @@ if (workspace) {
   const dstName = workspace.dataset.dstName;
   const delivery = workspace.dataset.delivery || "likes";
   const toPlaylist = delivery === "playlist";
-  const appliedWord = toPlaylist ? "добавлено" : "пролайкано";
-  const applyVerb = toPlaylist ? "Добавить" : "Лайкнуть";
+  const appliedWord = toPlaylist ? "added" : "liked";
+  const applyVerb = toPlaylist ? "Add" : "Like";
 
   const TRACK_URL = {
     yandex: (id) => `https://music.yandex.ru/track/${id}`,
@@ -42,21 +42,16 @@ if (workspace) {
     applyTotal: $("#apply-total"),
   };
 
-  // The header is server-rendered in UTC; rewrite it in local time.
   const origin = $("#src-origin");
   if (origin) origin.textContent = formatWhen(origin.dataset.created);
 
   const statusOf = (track) => track.status || "todo";
   const currentTrack = () => state.tracks[state.activeIndex];
 
-  // Covers come from the import at 200x200; the cards render them much
-  // smaller, so shrink the URL where the service lets us.
   function cover(url, size) {
     if (!url) return "";
     return /\/\d+x\d+$/.test(url) ? url.replace(/\/\d+x\d+$/, `/${size}`) : url;
   }
-
-  // --- rendering ----------------------------------------------------------
 
   function renderProgress() {
     const { total, chosen, applied, skipped } = state.counts;
@@ -65,8 +60,8 @@ if (workspace) {
 
     els.progressBar.style.width = `${percent}%`;
     els.progressText.textContent = total
-      ? `разобрано ${reviewed} из ${total} · ${appliedWord} ${applied}`
-      : "медиатека не загружена";
+      ? `reviewed ${reviewed} of ${total} · ${appliedWord} ${applied}`
+      : "library not imported";
 
     const counter = $("#track-count");
     if (counter) counter.textContent = total;
@@ -79,9 +74,9 @@ if (workspace) {
     els.applyBtn.disabled = chosen === 0;
     els.applyBtn.textContent = chosen
       ? (toPlaylist
-        ? `Добавить выбранные (${chosen}) → плейлист в ${dstName}`
-        : `${applyVerb} выбранные (${chosen}) в ${dstName}`)
-      : "Пока нечего переносить";
+        ? `Add the chosen (${chosen}) → playlist on ${dstName}`
+        : `${applyVerb} the chosen (${chosen}) on ${dstName}`)
+      : "Nothing to deliver yet";
   }
 
   function renderList() {
@@ -114,22 +109,22 @@ if (workspace) {
     const status = statusOf(track);
     els.trackIndex.textContent = `${state.activeIndex + 1} / ${state.tracks.length}`;
 
-    let note = `<p>решение не принято</p>`;
+    let note = `<p>no choice yet</p>`;
     if (status === "chosen" || status === "applied") {
-      const verb = status === "applied" ? "пролайкано как" : "выбрано как";
+      const verb = status === "applied" ? "delivered as" : "chosen as";
       note = `<div class="chosen-note">
           <span class="chip ${status}"></span> ${verb}
           <strong>${escapeHtml(track.dst_title || "")}</strong> — ${escapeHtml(track.dst_artists || "")}
         </div>`;
     } else if (status === "skipped") {
-      note = `<div class="chosen-note skipped"><span class="chip skipped"></span> пропущено</div>`;
+      note = `<div class="chosen-note skipped"><span class="chip skipped"></span> skipped</div>`;
     }
 
     preloadImages([cover(track.src_thumbnail, "100x100")]);
 
     els.sourceCard.innerHTML = `
       <a class="open-link" href="${trackLink(src, track.src_external_id)}"
-         target="_blank" rel="noopener" title="Открыть в исходном сервисе">↗</a>
+         target="_blank" rel="noopener" title="Open in the source service">↗</a>
       <img src="${cover(track.src_thumbnail, '100x100')}" alt="" fetchpriority="high"
            decoding="async" onerror="this.style.visibility='hidden'">
       <div class="meta">
@@ -151,7 +146,7 @@ if (workspace) {
     els.candidates.innerHTML = "";
 
     if (!list.length) {
-      els.candidates.innerHTML = `<li style="cursor:default;color:#888">Ничего не найдено. Попробуйте другой запрос.</li>`;
+      els.candidates.innerHTML = `<li style="cursor:default;color:#888">Nothing found. Try a different search.</li>`;
       return;
     }
 
@@ -162,7 +157,7 @@ if (workspace) {
       const fromDb = candidate.origin === "db";
       li.classList.toggle("from-db", fromDb);
       const origin = fromDb
-        ? `<span class="origin-tag" title="Трек уже есть в локальной базе — искать в сервисе не пришлось">из базы</span>`
+        ? `<span class="origin-tag" title="Already in the local database — no need to ask the service">from library</span>`
         : "";
       li.innerHTML = `
         <span class="badge">${index + 1}</span>
@@ -181,7 +176,7 @@ if (workspace) {
       link.href = trackLink(dst, candidate.external_id);
       link.target = "_blank";
       link.rel = "noopener";
-      link.title = "Открыть в сервисе назначения";
+      link.title = "Open on the destination service";
       link.textContent = "↗";
       link.addEventListener("click", (event) => event.stopPropagation());
       li.insertBefore(link, li.firstChild);
@@ -191,13 +186,8 @@ if (workspace) {
     });
   }
 
-  // --- data ---------------------------------------------------------------
-
   async function loadTracks() {
     const data = await api(`/api/tracks?playlist_id=${playlistId}`);
-    // The API returns source order (oldest liked first); the workspace reads
-    // newest first by default. Applying still happens in source order - that
-    // is decided server-side, not by this list.
     state.tracks = data.tracks.slice().reverse();
     state.counts = data.counts;
 
@@ -238,7 +228,7 @@ if (workspace) {
   async function fetchCandidates({ track = currentTrack(), refresh = false, query = null } = {}) {
     if (!track) return;
 
-    els.candidates.innerHTML = `<li style="cursor:default;color:#888">Ищем…</li>`;
+    els.candidates.innerHTML = `<li style="cursor:default;color:#888">Searching…</li>`;
     const params = new URLSearchParams({ playlist_id: playlistId });
     if (refresh) params.set("refresh", "true");
     if (query) params.set("query", query);
@@ -262,7 +252,7 @@ if (workspace) {
     if (next !== -1) return selectTrack(next);
 
     const anyTodo = state.tracks.some((track) => statusOf(track) === "todo");
-    if (!anyTodo) toast("Все треки разобраны 🎉", "ok");
+    if (!anyTodo) toast("All tracks reviewed 🎉", "ok");
     else selectTrack(Math.min(state.activeIndex + 1, state.tracks.length - 1));
   }
 
@@ -321,7 +311,7 @@ if (workspace) {
         if (result.done || result.applied === 0) break;
       }
 
-      toast(`${applied} треков ${appliedWord} в ${dstName}`, "ok");
+      toast(`${applied} tracks ${appliedWord} on ${dstName}`, "ok");
       document.dispatchEvent(new CustomEvent("playlists:changed"));
       await loadTracks();
     } catch (error) {
@@ -329,8 +319,6 @@ if (workspace) {
       els.applyBtn.disabled = false;
     }
   }
-
-  // --- events -------------------------------------------------------------
 
   els.applyBtn.addEventListener("click", applyAll);
   $("#prev-track").addEventListener("click", () => selectTrack(state.activeIndex - 1));

@@ -3,20 +3,21 @@
 
 {% block content %}
 <div class="welcome" id="welcome">
-  <h2>Перенос медиатеки</h2>
+  <h2>Moving a library</h2>
   <p style="color:#555">
-    Приложение берёт плейлист из одного сервиса, ищет те же треки во втором,
-    показывает варианты на выбор и ставит лайки в исходном порядке.
+    The app takes a playlist from one service, looks the same tracks up on
+    another, lets you pick from the candidates, and delivers them in the
+    original order.
   </p>
   <ol>
-    <li>Нажмите <b>Войти</b> у сервиса — токен хранится только локально.</li>
-    <li><b>Загрузить</b> забирает медиатеку и создаёт из неё плейлист с датой.</li>
-    <li>У плейлиста нажмите <b>Экспорт</b> — появится плейлист в сервисе назначения.</li>
-    <li>В нём сопоставляйте треки по одному и жмите «Лайкнуть выбранные».</li>
+    <li>Press <b>Log in</b> on a service — the token stays on this machine.</li>
+    <li><b>Import</b> snapshots that service's library into a dated playlist.</li>
+    <li>Press <b>Export</b> on a playlist to create a target on another service.</li>
+    <li>Match the tracks one by one, then deliver the chosen ones.</li>
   </ol>
   <p style="color:#777;font-size:.85em;margin-bottom:0">
-    Учётных записей нет: приложением пользуется один человек, все данные лежат
-    в <code>data/app.db</code>.
+    No accounts: this is a one-person tool and everything lives in
+    <code>data/app.db</code>.
   </p>
 </div>
 {% endblock %}

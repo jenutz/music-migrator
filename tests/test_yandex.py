@@ -1,9 +1,3 @@
-"""Yandex track normalization.
-
-``yandex-music`` 3.x asserts that an album has a cover instead of returning
-None, which used to abort a whole import on one cover-less album.
-"""
-
 from types import SimpleNamespace
 
 from app.integrations.yandex import YandexClient
@@ -13,7 +7,7 @@ def make_album(title="Album", cover_uri="avatars.yandex.net/get-music-content/1/
     album = SimpleNamespace(title=title, cover_uri=cover_uri)
 
     def get_cover_url(size="200x200"):
-        assert isinstance(album.cover_uri, str)  # mirrors the real library
+        assert isinstance(album.cover_uri, str)
         return f"https://{album.cover_uri.replace('%%', size)}"
 
     album.get_cover_url = get_cover_url

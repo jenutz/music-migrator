@@ -1,4 +1,3 @@
-
 def test_full_flow(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
     target_id = client.post(
@@ -7,7 +6,6 @@ def test_full_flow(client, fake, youtube_import):
 
     src_track_id = client.get(f"/api/tracks?playlist_id={target_id}").json()["tracks"][0]["src_track_id"]
 
-    # candidates are ranked, best first -- the live-only video must lose
     candidates = client.get(
         f"/api/candidates/{src_track_id}?playlist_id={target_id}"
     ).json()["candidates"]

@@ -1,8 +1,7 @@
-from app import db
+from app import crud
 
 
 def test_import_requires_token(client):
-    # no client is constructed here: the guard fires first
     assert client.post("/api/import/yandex").status_code == 400
     assert client.post("/api/import/youtube").status_code == 400
 
@@ -30,10 +29,10 @@ def test_import_creates_a_playlist(client, fake):
     body = response.json()
     assert body["imported"] == 1
 
-    playlist = db.get_playlist(body["playlist_id"])
+    playlist = crud.get_playlist(body["playlist_id"])
     assert playlist.service == "youtube"
     assert playlist.source_playlist_id is None
-    assert db.playlist_tracks(playlist.id)[0].track.title == "Blue Monday"
+    assert crud.playlist_tracks(playlist.id)[0].track.title == "Blue Monday"
 
 
 def test_each_import_is_a_separate_playlist(client, fake):

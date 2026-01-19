@@ -1,8 +1,9 @@
 from sqlalchemy import func, select
 
-from .core import now, session
+from app.core.db import now, session
+from app.models import Playlist, PlaylistTrack
+
 from .matches import match_counts
-from .models import Playlist, PlaylistTrack
 from .tracks import _upsert
 
 
@@ -43,7 +44,6 @@ def get_playlist(playlist_id: int) -> Playlist | None:
 
 
 def delete_playlist(playlist_id: int) -> None:
-    """Drop the playlist; SQLite cascades to its entries, matches and exports."""
     with session() as db_session:
         playlist = db_session.get(Playlist, playlist_id)
         if playlist:

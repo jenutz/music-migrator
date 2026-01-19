@@ -1,4 +1,4 @@
-from app import db
+from app import crud
 
 
 def test_health(client):
@@ -44,7 +44,7 @@ def test_unknown_playlist_is_404(client):
 
 
 def test_device_flow_status_starts_idle(client):
-    from app.main import yandex_auth
+    from app.services import yandex_auth
 
     yandex_auth.reset()
     response = client.get("/api/auth/yandex/status")
@@ -58,7 +58,7 @@ def test_device_flow_start_exposes_the_user_code(client, monkeypatch):
     from tests.test_auth import StubOAuthClient, token, wait_for
 
     manager = YandexDeviceAuth(lambda: StubOAuthClient(token=token()))
-    monkeypatch.setattr("app.main.yandex_auth", manager)
+    monkeypatch.setattr("app.api.routers.auth.yandex_auth", manager)
 
     started = client.post("/api/auth/yandex/start")
     assert started.status_code == 200
@@ -67,7 +67,7 @@ def test_device_flow_start_exposes_the_user_code(client, monkeypatch):
     response = client.get("/api/auth/yandex/status")
 
     assert response.json()["state"] == "success"
-    assert db.get_setting("token-yandex") == "yandex-access"
+    assert crud.get_setting("token-yandex") == "yandex-access"
 
 
 def test_device_flow_can_be_cancelled(client, monkeypatch):
@@ -75,7 +75,7 @@ def test_device_flow_can_be_cancelled(client, monkeypatch):
     from tests.test_auth import BlockingOAuthClient, wait_for
 
     manager = YandexDeviceAuth(lambda: BlockingOAuthClient())
-    monkeypatch.setattr("app.main.yandex_auth", manager)
+    monkeypatch.setattr("app.api.routers.auth.yandex_auth", manager)
 
     client.post("/api/auth/yandex/start")
     wait_for(manager, "pending")

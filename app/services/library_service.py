@@ -1,6 +1,6 @@
 import logging
 
-from app import db
+from app import crud
 from app.integrations.factory import FULL_NAME, MusicService, choose_api
 
 logger = logging.getLogger(__name__)
@@ -9,9 +9,9 @@ CLEAR_BATCH = 100
 
 
 def _client(service: MusicService):
-    token = db.get_setting(f"token-{service.value}")
+    token = crud.get_setting(f"token-{service.value}")
     if not token:
-        raise ValueError(f"Сначала войдите в {FULL_NAME[service.value]}")
+        raise ValueError(f"Log in to {FULL_NAME[service.value]} first")
     return choose_api(service.value, token)
 
 
@@ -20,11 +20,6 @@ def liked_count(service: MusicService) -> int:
 
 
 def clear_likes(service: str) -> dict:
-    """Remove every track from the liked library of `service`.
-
-    Only the service is touched: imported snapshots and match tables stay as
-    they are, so a cleared library can still be compared against.
-    """
     svc = MusicService(service)
     client = _client(svc)
 

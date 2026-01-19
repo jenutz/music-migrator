@@ -7,7 +7,6 @@ from .base_music_api import BaseMusicApi
 
 logger = logging.getLogger(__name__)
 
-# Noise words that YouTube titles carry around and Yandex titles usually don't.
 _NOISE_PATTERNS = [
     r"\(remastered\s*\d{4}\)",
     r"\(\d{4}\s*remaster\)",
@@ -20,7 +19,6 @@ _NOISE_WORDS = re.compile(
 
 
 def strip_tags(title: str) -> str:
-    """Drop the "(Official Video)" / "Remastered 2011" noise from a title."""
     result = title or ""
     for pattern in _NOISE_PATTERNS:
         result = re.sub(pattern, "", result, flags=re.IGNORECASE)
@@ -70,7 +68,6 @@ class YoutubeClient(BaseMusicApi):
     def search(self, query: str, limit: int = 10) -> list[dict]:
         raw = self.client.search(query, filter="songs", limit=limit)
         if not raw:
-            # `songs` filter misses some uploads; fall back to a mixed search.
             raw = self.client.search(query, limit=limit)
         results = [r for r in raw if r.get("resultType") in ("song", "video")]
         return [self._normalize(r) for r in results[:limit]]
@@ -91,7 +88,6 @@ class YoutubeClient(BaseMusicApi):
         video_ids = [str(t) for t in track_ids if t]
         playlist_id = self.client.create_playlist(name, "", video_ids=video_ids or None)
         if not isinstance(playlist_id, str):
-            # ytmusicapi returns an error dict instead of raising on some failures
             raise RuntimeError(f"create_playlist failed: {playlist_id}")
         return playlist_id
 

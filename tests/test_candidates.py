@@ -1,4 +1,4 @@
-from app import db
+from app import crud
 
 
 def _target(client, src_playlist_id=1):
@@ -29,9 +29,9 @@ def test_candidates_are_cached(client, fake, monkeypatch, youtube_import):
 
 def test_known_track_is_matched_from_the_database_without_a_request(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    db.create_playlist(
+    crud.create_playlist(
         "yandex",
-        "Медиатека",
+        "Library",
         [{
             "service": "yandex",
             "external_id": "ya-blue-monday",
@@ -77,9 +77,9 @@ def test_unknown_track_still_asks_the_service(client, fake, youtube_import):
 
 def test_local_hits_are_merged_with_remote_ones(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    db.create_playlist(
+    crud.create_playlist(
         "yandex",
-        "Медиатека",
+        "Library",
         [{
             "service": "yandex",
             "external_id": "ya-live",
@@ -106,12 +106,12 @@ def test_local_hits_are_merged_with_remote_ones(client, fake, youtube_import):
 
 def test_same_recording_is_not_listed_twice(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    db.create_playlist(
+    crud.create_playlist(
         "yandex",
-        "Медиатека",
+        "Library",
         [{
             "service": "yandex",
-            "external_id": "yt-1",  # same id the fake service returns
+            "external_id": "yt-1",
             "title": "Blue Monday",
             "artists": "New Order",
             "album": None,
@@ -132,9 +132,9 @@ def test_same_recording_is_not_listed_twice(client, fake, youtube_import):
 
 def test_refresh_forces_a_real_search(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    db.create_playlist(
+    crud.create_playlist(
         "yandex",
-        "Медиатека",
+        "Library",
         [{
             "service": "yandex",
             "external_id": "ya-blue-monday",
@@ -160,9 +160,9 @@ def test_refresh_forces_a_real_search(client, fake, youtube_import):
 
 def test_custom_query_ignores_the_local_library(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    db.create_playlist(
+    crud.create_playlist(
         "yandex",
-        "Медиатека",
+        "Library",
         [{
             "service": "yandex",
             "external_id": "ya-blue-monday",
@@ -185,11 +185,10 @@ def test_custom_query_ignores_the_local_library(client, fake, youtube_import):
 
 
 def test_a_strong_local_match_does_not_drag_noise_along(client, fake, youtube_import):
-    """Near misses score 50-70 against the whole library; a perfect hit drops them."""
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    db.create_playlist(
+    crud.create_playlist(
         "yandex",
-        "Медиатека",
+        "Library",
         [
             {
                 "service": "yandex",
@@ -201,7 +200,6 @@ def test_a_strong_local_match_does_not_drag_noise_along(client, fake, youtube_im
                 "duration_s": 450,
             },
             {
-                # scores 70: similar title, wrong artist
                 "service": "yandex",
                 "external_id": "ya-remastered",
                 "title": "Blue Monday (Remastered)",
@@ -211,7 +209,6 @@ def test_a_strong_local_match_does_not_drag_noise_along(client, fake, youtube_im
                 "duration_s": 450,
             },
             {
-                # scores 50: same title, wrong artist, wrong length
                 "service": "yandex",
                 "external_id": "ya-live",
                 "title": "Blue Monday (Live)",
@@ -235,9 +232,9 @@ def test_a_strong_local_match_does_not_drag_noise_along(client, fake, youtube_im
 
 def test_local_answers_are_not_cached(client, fake, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    db.create_playlist(
+    crud.create_playlist(
         "yandex",
-        "Медиатека",
+        "Library",
         [{
             "service": "yandex",
             "external_id": "ya-blue-monday",
@@ -254,15 +251,14 @@ def test_local_answers_are_not_cached(client, fake, youtube_import):
 
     client.get(f"/api/candidates/{src_track_id}?playlist_id={target_id}")
 
-    assert db.get_cached_search(src_track_id, "yandex") is None
+    assert crud.get_cached_search(src_track_id, "yandex") is None
 
 
 def test_a_db_answer_can_be_chosen_without_a_cached_search(client, fake, youtube_import):
-    """Local candidates are not cached, so choosing one has to work anyway."""
     client.post("/api/token/yandex", json={"value": "y0-token"})
-    db.create_playlist(
+    crud.create_playlist(
         "yandex",
-        "Медиатека",
+        "Library",
         [{
             "service": "yandex",
             "external_id": "ya-blue-monday",
@@ -280,7 +276,7 @@ def test_a_db_answer_can_be_chosen_without_a_cached_search(client, fake, youtube
     candidates = client.get(
         f"/api/candidates/{src_track_id}?playlist_id={target_id}"
     ).json()["candidates"]
-    assert db.get_cached_search(src_track_id, "yandex") is None
+    assert crud.get_cached_search(src_track_id, "yandex") is None
 
     response = client.post(
         f"/api/choose/{src_track_id}?playlist_id={target_id}",

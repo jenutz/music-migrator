@@ -1,4 +1,3 @@
-
 def test_export_creates_a_target_playlist(client, youtube_import):
     client.post("/api/token/yandex", json={"value": "y0-token"})
 
@@ -18,11 +17,10 @@ def test_export_needs_a_token_on_the_destination(client, youtube_import):
     response = client.post(f"/api/export/{youtube_import}", json={"dst_service": "yandex"})
 
     assert response.status_code == 400
-    assert "войдите" in response.json()["detail"].lower()
+    assert "log in" in response.json()["detail"].lower()
 
 
 def test_export_to_the_same_service(client, fake, youtube_import):
-    """A liked library has to become a playlist somewhere. Same service is fine."""
     client.post("/api/token/youtube", json={"value": "header-block"})
     response = client.post(
         f"/api/export/{youtube_import}", json={"dst_service": "youtube", "delivery": "playlist"}

@@ -7,10 +7,6 @@ const TRACK_URL = {
 
 const main = $("#main-content");
 
-// --- helpers --------------------------------------------------------------
-
-// Covers are stored at 200x200; ask the service for something near the size we
-// actually paint so a long library does not fetch full-size images.
 function thumbUrl(url, size = "100x100") {
   if (!url) return "";
   return /\/\d+x\d+$/.test(url) ? url.replace(/\/\d+x\d+$/, `/${size}`) : url;
@@ -18,26 +14,22 @@ function thumbUrl(url, size = "100x100") {
 
 function playlistSubtitle(playlist) {
   if (playlist.kind === "imported") {
-    return `${playlist.total} треков`;
+    return `${playlist.total} tracks`;
   }
 
-  const parts = [`пролайкано ${playlist.applied} из ${playlist.total}`];
-  if (playlist.chosen) parts.push(`выбрано ${playlist.chosen}`);
-  if (playlist.total && playlist.applied >= playlist.total) parts.unshift("готово");
+  const parts = [`${playlist.applied} of ${playlist.total} delivered`];
+  if (playlist.chosen) parts.push(`${playlist.chosen} chosen`);
+  if (playlist.total && playlist.applied >= playlist.total) parts.unshift("done");
   return parts.join(" · ");
 }
-
-// --- playlist list --------------------------------------------------------
 
 let playlists = [];
 
 function playlistRowHtml(playlist) {
   const target = playlist.kind === "target";
 
-  // A target playlist is only meaningful next to the snapshot it came from,
-  // so spell that out under the row instead of a bare service name.
   const origin = target && playlist.source_created_at
-    ? `<span class="playlist-origin" title="Исходный плейлист">
+    ? `<span class="playlist-origin" title="Source playlist">
          ← ${formatWhen(playlist.source_created_at)}
          <span class="playlist-origin-service">${escapeHtml(playlist.source_service_name || "")}</span>
        </span>`
@@ -51,10 +43,10 @@ function playlistRowHtml(playlist) {
       </div>
       <div class="playlist-actions">
         ${target
-          ? `<button data-act="open" title="Продолжить сопоставление">Продолжить</button>`
-          : `<button data-act="export" title="Создать плейлист в другом сервисе">Экспорт</button>`}
-        <button data-act="view" class="secondary" title="Показать треки">Просмотр</button>
-        <button data-act="delete" class="danger" title="Удалить плейлист">×</button>
+          ? `<button data-act="open" title="Continue matching">Continue</button>`
+          : `<button data-act="export" title="Create a playlist on another service">Export</button>`}
+        <button data-act="view" class="secondary" title="Show the tracks">View</button>
+        <button data-act="delete" class="danger" title="Delete this playlist">×</button>
       </div>
       ${origin}
     </li>
@@ -70,7 +62,7 @@ function renderPlaylists(data) {
 
     list.innerHTML = mine.length
       ? mine.map(playlistRowHtml).join("")
-      : `<li class="playlist-empty">плейлистов пока нет</li>`;
+      : `<li class="playlist-empty">no playlists yet</li>`;
 
     for (const row of $$(".playlist-row", list)) {
       const id = Number(row.dataset.id);
@@ -97,22 +89,19 @@ async function refreshPlaylists() {
 
 async function removePlaylist(playlist) {
   const label = formatWhen(playlist.created_at);
-  if (!confirm(`Удалить плейлист ${label}?`)) return;
+  if (!confirm(`Delete the playlist from ${label}?`)) return;
 
   try {
     await api(`/api/playlist/${playlist.id}`, { method: "DELETE" });
-    toast("Плейлист удалён", "ok");
+    toast("Playlist deleted", "ok");
     await refreshPlaylists();
 
-    // the open workspace belonged to it, go home
     if ($("#workspace")?.dataset.playlist === String(playlist.id)) location.href = "/";
     else if (main.dataset.playlist === String(playlist.id)) location.href = "/";
   } catch (error) {
     toast(error.message, "err");
   }
 }
-
-// --- views ----------------------------------------------------------------
 
 function clearView() {
   delete main.dataset.view;
@@ -126,13 +115,13 @@ function showWelcome() {
 const DELIVERY_OPTIONS = [
   {
     value: "playlist",
-    label: "Новый плейлист",
-    hint: "В выбранном сервисе появится плейлист с отмеченными треками.",
+    label: "New playlist",
+    hint: "The chosen tracks become a playlist on the selected service.",
   },
   {
     value: "likes",
-    label: "В лайки",
-    hint: "Отмеченные треки добавятся в медиатеку выбранного сервиса.",
+    label: "Into likes",
+    hint: "The chosen tracks are liked in the selected service's library.",
   },
 ];
 
@@ -143,11 +132,11 @@ function renderChooser(sourcePlaylist) {
 
   main.innerHTML = `
     <div class="main-header">
-      <h2>Экспорт плейлиста</h2>
-      <span class="muted">${formatWhen(sourcePlaylist.created_at)} · ${sourcePlaylist.total} треков</span>
+      <h2>Export playlist</h2>
+      <span class="muted">${formatWhen(sourcePlaylist.created_at)} · ${sourcePlaylist.total} tracks</span>
     </div>
     <div class="panel export-panel">
-      <h3 class="export-step">Куда</h3>
+      <h3 class="export-step">Where</h3>
       <div class="delivery-pick">
         ${DELIVERY_OPTIONS.map((option) => `
           <button class="delivery${option.value === delivery ? " active" : ""}"
@@ -156,7 +145,7 @@ function renderChooser(sourcePlaylist) {
       </div>
       <p class="export-hint" id="export-hint"></p>
 
-      <h3 class="export-step">В какой сервис</h3>
+      <h3 class="export-step">To which service</h3>
       <div class="services-row">
         ${services.map((sid) => {
           const row = $(`.service-row[data-service="${sid}"]`);
@@ -166,13 +155,13 @@ function renderChooser(sourcePlaylist) {
           return `<button class="service-pick" data-dst="${sid}" ${ready ? "" : "disabled"}>
             <img src="/static/${sid}_icon.svg" alt="${sid}">
             <span>${escapeHtml(name)}</span>
-            ${same ? '<small>тот же сервис</small>' : ""}
-            ${ready ? "" : '<small class="muted">нет токена</small>'}
+            ${same ? "<small>same service</small>" : ""}
+            ${ready ? "" : '<small class="muted">no token</small>'}
           </button>`;
         }).join("")}
       </div>
       <p class="export-note">
-        Исходный плейлист остаётся нетронутым — экспорт только читает его.
+        The source playlist is not modified — exporting only reads it.
       </p>
     </div>
   `;
@@ -202,7 +191,7 @@ function renderChooser(sourcePlaylist) {
           body: JSON.stringify({ dst_service: btn.dataset.dst, delivery }),
         });
         await refreshPlaylists();
-        toast(result.delivery === "playlist" ? "Плейлист создан" : "Экспорт в лайки готов", "ok");
+        toast(result.delivery === "playlist" ? "Playlist created" : "Ready to like the tracks", "ok");
         location.href = `/migrate/${result.playlist_id}`;
       } catch (error) {
         toast(error.message, "err");
@@ -212,37 +201,33 @@ function renderChooser(sourcePlaylist) {
   }
 }
 
-// --- library table --------------------------------------------------------
-
 const collator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
 
 const IMPORTED_COLUMNS = [
   { key: "position", label: "#", numeric: true },
   { key: null, label: "" },
-  { key: "title", label: "Название" },
-  { key: "artists", label: "Исполнитель" },
-  { key: "album", label: "Альбом" },
-  { key: "duration_s", label: "Время", numeric: true },
+  { key: "title", label: "Title" },
+  { key: "artists", label: "Artist" },
+  { key: "album", label: "Album" },
+  { key: "duration_s", label: "Length", numeric: true },
   { key: "external_id", label: "ID", numeric: true },
 ];
 
 const TARGET_COLUMNS = [
   { key: "position", label: "#", numeric: true },
   { key: null, label: "" },
-  { key: "src_title", label: "Было" },
-  { key: "dst_title", label: "Стало" },
-  { key: "score", label: "Совпадение", numeric: true },
-  { key: "status", label: "Статус" },
+  { key: "src_title", label: "Source" },
+  { key: "dst_title", label: "Matched" },
+  { key: "score", label: "Score", numeric: true },
+  { key: "status", label: "Status" },
 ];
 
 const STATUS_LABEL = {
-  chosen: "выбрано",
-  applied: "пролайкано",
-  skipped: "пропущено",
+  chosen: "chosen",
+  applied: "delivered",
+  skipped: "skipped",
 };
 
-// position 0 is the oldest liked track, so "latest to oldest" is position
-// descending - that is also the default view.
 function sortRows(rows, key, direction) {
   const sorted = rows.slice();
   if (!key) return sorted.sort((a, b) => b.position - a.position);
@@ -266,13 +251,10 @@ function sortRows(rows, key, direction) {
   });
 }
 
-// Match rows carry src_thumbnail/dst_thumbnail, imported rows just thumbnail.
 function rowCover(row) {
   return row.dst_thumbnail || row.thumbnail || row.src_thumbnail;
 }
 
-// The first screenful is what the eye lands on, so it loads eagerly; the rest
-// stays lazy so opening a 1900-track playlist does not fire 1900 requests.
 const EAGER_ROWS = 12;
 
 function cellHtml(row, key, service, eager = false) {
@@ -301,7 +283,7 @@ function cellHtml(row, key, service, eager = false) {
     case "score":
       return `<td class="num">${row.score ?? "—"}</td>`;
     case "status":
-      return `<td>${row.status ? `<span class="status-pill ${row.status}">${STATUS_LABEL[row.status] || row.status}</span>` : '<span class="muted-cell">не разобрано</span>'}</td>`;
+      return `<td>${row.status ? `<span class="status-pill ${row.status}">${STATUS_LABEL[row.status] || row.status}</span>` : '<span class="muted-cell">unreviewed</span>'}</td>`;
     default:
       return `<td>${escapeHtml(row[key] ?? "")}</td>`;
   }
@@ -318,7 +300,7 @@ function renderTable(container, { columns, rows, service }) {
           <thead>
             <tr>
               ${columns.map((column) => column.key
-                ? `<th data-sort="${column.key}" title="Сортировать">${column.label}<span class="arrow"></span></th>`
+                ? `<th data-sort="${column.key}" title="Sort">${column.label}<span class="arrow"></span></th>`
                 : `<th>${column.label}</th>`).join("")}
             </tr>
           </thead>
@@ -413,8 +395,8 @@ async function renderPlaylistView(playlistId) {
   main.dataset.playlist = String(playlistId);
 
   main.innerHTML = `
-    <div class="main-header"><h2>Загрузка…</h2></div>
-    <div class="panel"><p class="empty">Загружаем треки…</p></div>
+    <div class="main-header"><h2>Loading…</h2></div>
+    <div class="panel"><p class="empty">Loading tracks…</p></div>
   `;
 
   let data;
@@ -430,8 +412,8 @@ async function renderPlaylistView(playlistId) {
 
   const title = `${playlist.service_name} · ${formatWhen(playlist.created_at)}`;
   const subtitle = isTarget
-    ? `${playlist.source_name} → пролайкано ${playlist.applied} из ${playlist.total}`
-    : `${tracks.length} треков`;
+    ? `${playlist.source_name} → ${playlist.applied} of ${playlist.total} delivered`
+    : `${tracks.length} tracks`;
 
   if (!tracks.length) {
     main.innerHTML = `
@@ -439,7 +421,7 @@ async function renderPlaylistView(playlistId) {
         <h2>${escapeHtml(title)}</h2>
         <span class="muted">${escapeHtml(subtitle)}</span>
       </div>
-      <div class="panel empty">Плейлист пуст.</div>
+      <div class="panel empty">This playlist is empty.</div>
     `;
     return;
   }
@@ -462,16 +444,12 @@ async function renderPlaylistView(playlistId) {
   });
 }
 
-// --- sidebar wiring -------------------------------------------------------
-
 function setConnected(row, connected) {
   const state = $(".service-state", row);
-  state.innerHTML = `<span class="dot"></span>${connected ? "подключён" : "нет токена"}`;
+  state.innerHTML = `<span class="dot"></span>${connected ? "connected" : "no token"}`;
   state.classList.toggle("ok", connected);
   $(".load-btn", row).disabled = !connected;
 }
-
-// --- yandex device flow ---------------------------------------------------
 
 function wireDeviceAuth(row, box) {
   const button = $(".device-btn", row);
@@ -496,7 +474,7 @@ function wireDeviceAuth(row, box) {
 
   const fail = (message) => {
     stopPolling();
-    showPanel(message || "Не удалось войти");
+    showPanel(message || "Could not log in");
     button.disabled = false;
   };
 
@@ -506,7 +484,7 @@ function wireDeviceAuth(row, box) {
     button.disabled = false;
     box.classList.remove("open");
     setConnected(row, true);
-    toast("Яндекс подключён", "ok");
+    toast("Yandex connected", "ok");
   };
 
   async function poll() {
@@ -539,7 +517,7 @@ function wireDeviceAuth(row, box) {
     if (timer) return; // already waiting
 
     codeEl.textContent = "…";
-    showPanel("Запрашиваем код у Яндекса…");
+    showPanel("Requesting a code from Yandex…");
 
     try {
       const data = await api("/api/auth/yandex/start", { method: "POST" });
@@ -559,12 +537,9 @@ function wireDeviceAuth(row, box) {
     try {
       await api("/api/auth/yandex/cancel", { method: "POST" });
     } catch {
-      /* nothing useful to do here */
     }
   });
 }
-
-// --- service rows ---------------------------------------------------------
 
 for (const row of $$(".service-row")) {
   const service = row.dataset.service;
@@ -586,7 +561,7 @@ for (const row of $$(".service-row")) {
   $(".save-token", row).addEventListener("click", async (event) => {
     const button = event.currentTarget;
     const value = textarea.value.trim();
-    if (!value) return toast("Вставьте токен", "err");
+    if (!value) return toast("Paste a token first", "err");
 
     button.disabled = true;
     try {
@@ -594,7 +569,7 @@ for (const row of $$(".service-row")) {
       textarea.value = "";
       box.classList.remove("open");
       setConnected(row, true);
-      toast("Токен сохранён", "ok");
+      toast("Token saved", "ok");
     } catch (error) {
       toast(error.message, "err");
     } finally {
@@ -606,55 +581,51 @@ for (const row of $$(".service-row")) {
     const button = event.currentTarget;
     const name = row.dataset.fullname || service;
 
-    // Irreversible and touches the account itself, not our copy of it, so it
-    // asks for the service name rather than a single OK.
     const typed = prompt(
-      `Удалить ВСЕ лайки в ${name}?\n\n` +
-        "Это действие в самом сервисе, отменить его нельзя. " +
-        `Введите «${service}», чтобы подтвердить:`
+      `Remove EVERY like in ${name}?\n\n` +
+        "This changes the service itself and cannot be undone. " +
+        `Type "${service}" to confirm:`
     );
     if (typed === null) return;
-    if (typed.trim().toLowerCase() !== service) return toast("Отменено", "err");
+    if (typed.trim().toLowerCase() !== service) return toast("Cancelled", "err");
 
     button.disabled = true;
-    button.textContent = "Чистим…";
+    button.textContent = "Clearing…";
     try {
       const result = await api(`/api/service/${service}/clear-likes`, { method: "POST" });
-      toast(`Удалено лайков: ${result.removed}`, "ok");
+      toast(`Likes removed: ${result.removed}`, "ok");
       await refreshPlaylists();
     } catch (error) {
       toast(error.message, "err");
     } finally {
       button.disabled = false;
-      button.textContent = "Очистить";
+      button.textContent = "Clear";
     }
   });
 
   $(".load-btn", row).addEventListener("click", async (event) => {
     const button = event.currentTarget;
     button.disabled = true;
-    button.textContent = "Загружаем…";
+    button.textContent = "Importing…";
 
     try {
       const result = await api(`/api/import/${service}`, { method: "POST" });
-      toast(`Загружено треков: ${result.imported}`, "ok");
+      toast(`Tracks imported: ${result.imported}`, "ok");
       await refreshPlaylists();
       renderPlaylistView(result.playlist_id);
     } catch (error) {
       toast(error.message, "err");
     } finally {
       button.disabled = false;
-      button.textContent = "Загрузить";
+      button.textContent = "Import";
     }
   });
 }
 
 refreshPlaylists();
 
-// the workspace refreshes the counters after it likes a batch
 document.addEventListener("playlists:changed", refreshPlaylists);
 
-// the migrate page ships its own workspace script; don't clobber it
 if (!$("#workspace")) {
   main.dataset.ready = "true";
 }

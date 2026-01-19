@@ -18,8 +18,6 @@ class YandexClient(BaseMusicApi):
 
     @staticmethod
     def _cover(album) -> str | None:
-        """Albums occasionally come back without a cover, and the library
-        asserts on that instead of returning None."""
         cover_uri = getattr(album, "cover_uri", None)
         if not isinstance(cover_uri, str):
             return None
@@ -65,8 +63,6 @@ class YandexClient(BaseMusicApi):
         return len(track_ids)
 
     def _album_ids(self, track_ids: list[str]) -> dict[str, str]:
-        """Yandex will not insert a track into a playlist without its album id,
-        which the liked-library payload does not carry, so look them up."""
         found = {}
         try:
             tracks = self.client.tracks(track_ids) or []

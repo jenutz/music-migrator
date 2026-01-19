@@ -3,13 +3,14 @@ import functools
 import logging
 import re
 
-from app import db
+from app import crud
+from app.models import Track
 from app.integrations.factory import choose_api
 from app.integrations.youtube import strip_tags
 
 logger = logging.getLogger(__name__)
 
-try:  # rapidfuzz is much faster and gives better partial ratios
+try:
     from rapidfuzz import fuzz as _fuzz  # type: ignore
 except ImportError:  # pragma: no cover - fallback keeps the app usable
     _fuzz = None
@@ -35,13 +36,11 @@ def _ratio(a: str, b: str) -> float:
 
 
 def score_track(source: dict, candidate: dict) -> int:
-    """0-100 confidence that `candidate` is the same recording as `source`."""
     title_score = _ratio(_norm(source["title"]), _norm(candidate.get("title")))
     artist_score = _ratio(_norm(source["artists"]), _norm(candidate.get("artists")))
 
     score = title_score * 0.6 + artist_score * 0.4
 
-    # A wildly different runtime is usually a live/remix/covers mix-up.
     src_d, dst_d = source.get("duration_s"), candidate.get("duration_s")
     if src_d and dst_d:
         delta = abs(int(src_d) - int(dst_d))
@@ -51,7 +50,7 @@ def score_track(source: dict, candidate: dict) -> int:
             score += 5
 
     if candidate.get("result_type") == "video":
-        score -= 8  # music videos sit below proper song uploads
+        score -= 8
 
     return max(0, min(100, round(score)))
 
@@ -63,7 +62,7 @@ class MatchService:
     LOCAL_LIMIT = 10
 
     def __init__(self, dst_playlist_id: int):
-        playlist = db.get_playlist(dst_playlist_id)
+        playlist = crud.get_playlist(dst_playlist_id)
         if not playlist:
             raise ValueError(f"Unknown playlist {dst_playlist_id}")
         if not playlist.source_playlist_id:
@@ -74,12 +73,11 @@ class MatchService:
         self.dst_service = playlist.service
         self.src_playlist_id = playlist.source_playlist_id
 
-    def _local_candidates(self, source: db.Track) -> list[dict]:
-        """Ids from here are likeable without a round trip."""
+    def _local_candidates(self, source: Track) -> list[dict]:
         scorer_input = source.as_dict()
         found = []
 
-        for row in db.tracks_for_service(self.dst_service):
+        for row in crud.tracks_for_service(self.dst_service):
             candidate = row.as_dict()
             candidate["score"] = score_track(scorer_input, candidate)
             if candidate["score"] >= self.LOCAL_MIN_SCORE:
@@ -110,23 +108,22 @@ class MatchService:
         return results[: cls.LOCAL_LIMIT]
 
     def candidates(self, src_track_id: int, refresh: bool = False, query: str | None = None) -> list[dict]:
-        source = db.get_track(src_track_id)
+        source = crud.get_track(src_track_id)
         if not source:
             raise ValueError(f"Unknown track {src_track_id}")
 
         if not refresh and not query:
-            cached = db.get_cached_search(src_track_id, self.dst_service)
+            cached = crud.get_cached_search(src_track_id, self.dst_service)
             if cached is not None:
                 return cached
 
         local = [] if query else self._local_candidates(source)
 
         if local and local[0]["score"] >= self.LOCAL_GOOD_ENOUGH and not refresh:
-            # not cached: it is a view of the library as it is right now
             logger.info("Answered %r from the local library", source.title)
             return local
 
-        token = db.get_setting(f"token-{self.dst_service}")
+        token = crud.get_setting(f"token-{self.dst_service}")
         client = choose_api(self.dst_service, token)
         search_query = query or f"{source.title} {source.artists}"
 
@@ -138,17 +135,17 @@ class MatchService:
             result["origin"] = "search"
 
         results = self._merge(local, remote)
-        db.set_cached_search(src_track_id, self.dst_service, results)
+        crud.set_cached_search(src_track_id, self.dst_service, results)
         return results
 
     def choose(self, src_track_id: int, candidate: dict) -> dict:
-        source = db.get_track(src_track_id)
+        source = crud.get_track(src_track_id)
         if not source:
             raise ValueError(f"Unknown track {src_track_id}")
         if not candidate.get("external_id"):
             raise ValueError("Candidate has no external id")
 
-        db.save_match(
+        crud.save_match(
             dst_playlist_id=self.playlist_id,
             src_track_id=src_track_id,
             track=candidate,
@@ -157,13 +154,13 @@ class MatchService:
         return {"src_track_id": src_track_id, "status": "chosen"}
 
     def choose_by_id(self, src_track_id: int, external_id: str) -> dict:
-        for candidate in db.get_cached_search(src_track_id, self.dst_service) or []:
+        for candidate in crud.get_cached_search(src_track_id, self.dst_service) or []:
             if candidate.get("external_id") == external_id:
                 return self.choose(src_track_id, candidate)
 
         # Local answers are deliberately not cached, so score the library again
         # instead of telling the user their own click was invalid.
-        source = db.get_track(src_track_id)
+        source = crud.get_track(src_track_id)
         if not source:
             raise ValueError(f"Unknown track {src_track_id}")
 
@@ -174,12 +171,12 @@ class MatchService:
         raise ValueError(f"Candidate {external_id} not found for track {src_track_id}")
 
     def skip(self, src_track_id: int) -> dict:
-        db.skip_match(self.playlist_id, src_track_id)
+        crud.skip_match(self.playlist_id, src_track_id)
         return {"src_track_id": src_track_id, "status": "skipped"}
 
     def build_target(self, src_track_id: int) -> dict:
-        source = db.get_track(src_track_id)
-        match = db.get_match(self.playlist_id, src_track_id)
+        source = crud.get_track(src_track_id)
+        match = crud.get_match(self.playlist_id, src_track_id)
         return {
             "source": source.as_dict() if source else None,
             "match": {

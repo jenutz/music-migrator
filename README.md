@@ -12,12 +12,12 @@ classes; the tables are all there is, no service/repository tier on top.
 Playlists are the unit of work, not services. A service row only logs in and
 imports; everything you review and apply happens inside a playlist.
 
-1. Connect a service — for Yandex press **Войти через Яндекс** and confirm the
+1. Connect a service — for Yandex press **Log in with Yandex** and confirm the
    code on the Yandex page; YouTube still takes a pasted header block.
-2. **Загрузить** snapshots that service's liked tracks into a new playlist,
+2. **Import** snapshots that service's liked tracks into a new playlist,
    listed in the sidebar under the service with the date it was imported.
    Importing again creates another playlist instead of overwriting the old one.
-3. **Экспорт** on a playlist creates a *target* playlist. Pick where the tracks
+3. **Export** on a playlist creates a *target* playlist. Pick where the tracks
    should land — a **new playlist** on the destination service, or **into the
    likes** — and which service, including the same one. Several targets can
    exist for the same source, each with its own choices.
@@ -30,7 +30,7 @@ imports; everything you review and apply happens inside a playlist.
    not sent twice. A playlist target creates the remote playlist on the first
    batch and appends to it afterwards. The sidebar row shows the progress.
 
-Each service row also has **Очистить**, which empties that service's liked
+Each service row also has **Clear**, which empties that service's liked
 library. It asks you to type the service name, and it never touches the
 snapshots already imported here.
 
@@ -78,7 +78,7 @@ folder instead of a rule per artefact. It is safe to delete wholesale.
 
 ## Tokens
 
-**Yandex Music** — press **Войти через Яндекс** in the sidebar: the app asks
+**Yandex Music** — press **Log in with Yandex** in the sidebar: the app asks
 Yandex for a device code, shows it, and waits for you to confirm it on
 https://ya.ru/device. The token is saved to the local database. A manually
 pasted token still works as a fallback

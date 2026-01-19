@@ -23,13 +23,11 @@ export async function api(url, options = {}) {
   try { payload = text ? JSON.parse(text) : null; } catch { payload = { detail: text }; }
 
   if (!response.ok) {
-    throw new Error(payload?.detail || `Ошибка запроса (${response.status})`);
+    throw new Error(payload?.detail || `Request failed (${response.status})`);
   }
   return payload;
 }
 
-// Timestamps are stored in UTC; show them in the browser's own timezone so a
-// playlist row and the workspace header never disagree.
 export function formatWhen(iso) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso || "";
@@ -52,10 +50,6 @@ export function escapeHtml(value) {
 
 const preloaded = new Set();
 
-// Ask the browser to fetch covers before the <img> tags are parsed/inserted.
-// The request is deduplicated with the later <img src>, so this only moves it
-// earlier - which is the difference between a cover appearing instantly and
-// appearing after the row is already on screen.
 export function preloadImages(urls) {
   for (const url of urls) {
     if (!url || preloaded.has(url)) continue;

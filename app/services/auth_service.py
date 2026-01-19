@@ -1,8 +1,3 @@
-"""The library's device_auth() blocks until the user confirms, so it runs in a
-daemon thread and the browser polls. The token is written to ``settings`` under
-the same key the manual paste path uses.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -12,18 +7,15 @@ from typing import Callable
 
 import yandex_music
 
-from app import db
+from app import crud
 from app.integrations import reset_cache
 
 logger = logging.getLogger(__name__)
 
 SERVICE = "yandex"
 
-# Shown on the Yandex confirmation page. Helps the user tell devices apart.
 DEVICE_NAME = "Music Migrator"
 
-# The server picks the real lifetime (usually ~5 minutes). Keep a matching cap
-# so a forgotten tab does not leave a polling thread around for a whole hour.
 FLOW_TIMEOUT_S = 300
 
 TOKEN_KEY = f"token-{SERVICE}"
@@ -35,9 +27,9 @@ def _describe(exc: Exception) -> str:
     text = str(exc).strip() or exc.__class__.__name__
 
     if "Network is unreachable" in text or "Connection" in text:
-        return "Нет связи с api.music.yandex.net. Проверьте сеть или вставьте токен вручную."
+        return "Cannot reach api.music.yandex.net. Check the network or paste a token manually."
     if "timed out" in text:
-        return "Код устарел — начните вход заново."
+        return "The code expired — start the login again."
     if "cancelled" in text:
         return ""
     return text[:300]
@@ -119,7 +111,7 @@ class YandexDeviceAuth:
             cancelled = self._cancel.is_set() or "cancelled" in str(exc)
             self._finish("cancelled" if cancelled else "error", error=None if cancelled else _describe(exc))
             return
-        except Exception as exc:  # network, bad client, anything unexpected
+        except Exception as exc:
             logger.exception("Yandex device auth failed")
             self._finish("error", error=_describe(exc))
             return
@@ -128,24 +120,24 @@ class YandexDeviceAuth:
             self._store_token(token)
         except Exception as exc:
             logger.exception("Could not store the Yandex token")
-            self._finish("error", error=f"Токен получен, но не сохранился: {exc}")
+            self._finish("error", error=f"Token received but not saved: {exc}")
             return
 
         self._finish("success")
 
     @staticmethod
     def _store_token(token) -> None:
-        db.set_setting(TOKEN_KEY, token.access_token)
+        crud.set_setting(TOKEN_KEY, token.access_token)
 
         if getattr(token, "refresh_token", None):
-            db.set_setting(REFRESH_KEY, token.refresh_token)
+            crud.set_setting(REFRESH_KEY, token.refresh_token)
 
         expires_in = getattr(token, "expires_in", None)
         if expires_in:
             expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
-            db.set_setting(EXPIRES_KEY, expires_at.isoformat(timespec="seconds"))
+            crud.set_setting(EXPIRES_KEY, expires_at.isoformat(timespec="seconds"))
 
-        reset_cache()  # drop clients still holding the old credentials
+        reset_cache()
         logger.info("Yandex token stored (expires_in=%s)", expires_in)
 
     def _finish(self, state: str, error: str | None = None) -> None:

@@ -1,13 +1,8 @@
-"""``src_playlist_id`` is the imported playlist, ``dst_playlist_id`` is the
-target created by exporting it. Every function takes both so nothing has to
-guess which playlist a match belongs to.
-"""
-
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.orm import Session
 
-from .core import now, session
-from .models import Match, PlaylistTrack, Track
+from app.core.db import now, session
+from app.models import Match, PlaylistTrack, Track
 
 _RANKED_STATUSES = ("chosen", "applied", "skipped")
 

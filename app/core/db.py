@@ -1,22 +1,12 @@
-"""One user, one SQLite file. Sessions are per call: FastAPI runs the sync
-routes on a threadpool, so nothing is shared across requests.
-"""
-
-import os
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Iterator
 
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from .models import Base
-
-BASE_DIR = Path(__file__).resolve().parents[2]
-DATA_DIR = Path(os.getenv("DATA_DIR", BASE_DIR / "data"))
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH = DATA_DIR / "app.db"
+from app.core.config import DB_PATH
+from app.models import Base
 
 engine = create_engine(f"sqlite:///{DB_PATH}", future=True)
 
@@ -60,17 +50,18 @@ def _backfill(db_session: Session) -> None:
     """Data fixups for databases written by earlier versions. There is no
     Alembic: schema changes get applied by hand to the one database.
     """
-    # targets that predate `delivery` behaved as likes
     db_session.execute(
         text(
             "UPDATE playlists SET delivery = 'likes'"
             " WHERE source_playlist_id IS NOT NULL AND delivery IS NULL"
         )
     )
-    # the old app had one hard-coded library name
     db_session.execute(
         text(
-            "UPDATE playlists SET name = 'Медиатека' WHERE name = 'Liked tracks'"
-            " AND source_playlist_id IS NULL"
+            "UPDATE playlists SET name = 'Library'"
+            " WHERE source_playlist_id IS NULL AND name IN ('Liked tracks', 'Медиатека')"
         )
+    )
+    db_session.execute(
+        text("UPDATE playlists SET name = 'Export' WHERE source_playlist_id IS NOT NULL AND name = 'Экспорт'")
     )

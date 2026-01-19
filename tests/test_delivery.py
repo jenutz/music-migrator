@@ -1,4 +1,4 @@
-from app import db
+from app import crud
 
 
 def test_playlist_delivery_builds_one_playlist_and_appends_to_it(client, fake, imported):
@@ -9,14 +9,14 @@ def test_playlist_delivery_builds_one_playlist_and_appends_to_it(client, fake, i
     ).json()["playlist_id"]
 
     for track_id in track_ids:
-        db.save_match(target_id, track_id, {"external_id": f"yt-{track_id}", "title": "X"}, 90)
+        crud.save_match(target_id, track_id, {"external_id": f"yt-{track_id}", "title": "X"}, 90)
 
     first = client.post(f"/api/apply?playlist_id={target_id}&limit=2").json()
     assert first["applied"] == 2
     assert first["sent"] == 2
     assert len(fake.created) == 1
     assert fake.created[0]["tracks"] == [f"yt-{t}" for t in track_ids[:2]]
-    assert fake.created[0]["name"] == "Медиатека", "the playlist keeps the source name"
+    assert fake.created[0]["name"] == "Library", "the playlist keeps the source name"
     assert fake.liked == [], "playlist delivery must not like anything"
 
     remote = client.get(f"/api/playlist/{target_id}").json()["playlist"]
@@ -35,7 +35,7 @@ def test_likes_delivery_never_creates_a_playlist(client, fake, imported):
         f"/api/export/{src_id}", json={"dst_service": "youtube", "delivery": "likes"}
     ).json()["playlist_id"]
 
-    db.save_match(target_id, track_ids[0], {"external_id": "yt-a", "title": "X"}, 90)
+    crud.save_match(target_id, track_ids[0], {"external_id": "yt-a", "title": "X"}, 90)
     client.post(f"/api/apply?playlist_id={target_id}")
 
     assert fake.liked == ["yt-a"]
@@ -55,4 +55,4 @@ def test_clear_likes_empties_the_service(client, fake, monkeypatch):
 def test_clear_likes_needs_a_token(client):
     response = client.post("/api/service/youtube/clear-likes")
     assert response.status_code == 400
-    assert "войдите" in response.json()["detail"].lower()
+    assert "log in" in response.json()["detail"].lower()

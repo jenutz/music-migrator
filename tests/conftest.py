@@ -19,17 +19,18 @@ sys.path.insert(0, str(ROOT))
 _TMP_DIR = tempfile.mkdtemp(prefix="music-migrator-tests-")
 os.environ["DATA_DIR"] = _TMP_DIR
 
-from app import db  # noqa: E402  (import after DATA_DIR is set)
+from app import crud  # noqa: E402  (imported after DATA_DIR is set)
+from app.core.db import init_db, session  # noqa: E402
 from app.integrations.factory import reset_cache  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models import Match, Playlist, PlaylistTrack, SearchCache, Setting, Track  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def clean_database():
-    db.init_db()
-    # child rows first, or the foreign keys complain
-    with db.session() as db_session:
-        for model in (db.Match, db.SearchCache, db.PlaylistTrack, db.Playlist, db.Track, db.Setting):
+    init_db()
+    with session() as db_session:
+        for model in (Match, SearchCache, PlaylistTrack, Playlist, Track, Setting):
             db_session.execute(delete(model))
     yield
 
@@ -52,23 +53,21 @@ def track_factory():
 
 @pytest.fixture
 def imported(track_factory):
-    """An imported playlist and the local ids of its tracks, in order."""
     tracks = [
         track_factory(title="Blue Monday", artists="New Order"),
         track_factory(title="Enjoy the Silence", artists="Depeche Mode"),
         track_factory(title="Sweet Dreams", artists="Eurythmics"),
     ]
-    playlist_id = db.create_playlist("yandex", "Медиатека", tracks)
-    ids = [entry.track_id for entry in db.playlist_tracks(playlist_id)]
+    playlist_id = crud.create_playlist("yandex", "Library", tracks)
+    ids = [entry.track_id for entry in crud.playlist_tracks(playlist_id)]
     return playlist_id, ids
 
 
 @pytest.fixture
 def target(imported):
-    """A target playlist created by exporting the imported one to youtube."""
     src_playlist_id, track_ids = imported
-    dst_playlist_id = db.create_playlist(
-        "youtube", "Экспорт", source_playlist_id=src_playlist_id
+    dst_playlist_id = crud.create_playlist(
+        "youtube", "Export", source_playlist_id=src_playlist_id
     )
     return dst_playlist_id, track_ids
 
@@ -142,7 +141,6 @@ def fake(monkeypatch):
 
 @pytest.fixture
 def youtube_import(client, fake):
-    """Log in to youtube and import, returning the new playlist id."""
     client.post("/api/token/youtube", json={"value": "header-block"})
     response = client.post("/api/import/youtube")
     return response.json()["playlist_id"]

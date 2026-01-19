@@ -1,8 +1,8 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .core import session
-from .models import Track
+from app.core.db import session
+from app.models import Track
 
 
 def _upsert(db_session: Session, track: dict) -> Track:

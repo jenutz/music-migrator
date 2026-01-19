@@ -1,11 +1,11 @@
 import logging
 
-from app import db
+from app import crud
 from app.integrations.factory import choose_api
 
 logger = logging.getLogger(__name__)
 
-IMPORTED_NAME = "Медиатека"
+IMPORTED_NAME = "Library"
 
 _TRACK_KEYS = ("service", "external_id", "title", "artists", "album", "thumbnail", "duration_s")
 
@@ -22,7 +22,7 @@ class ImportService:
         return cleaned
 
     def run(self) -> dict:
-        token = db.get_setting(f"token-{self.service}")
+        token = crud.get_setting(f"token-{self.service}")
         if not token:
             raise ValueError(f"No token stored for {self.service}")
 
@@ -37,11 +37,11 @@ class ImportService:
                 continue
             try:
                 tracks.append(self._clean(track))
-            except Exception:  # one weird track should not sink the import
+            except Exception:
                 skipped += 1
                 logger.warning("Skipping unparsable %s track: %r", self.service, track)
 
-        playlist_id = db.create_playlist(self.service, IMPORTED_NAME, tracks)
+        playlist_id = crud.create_playlist(self.service, IMPORTED_NAME, tracks)
         logger.info("Stored %s tracks as playlist %s", len(tracks), playlist_id)
 
         return {
@@ -55,10 +55,10 @@ class ImportService:
     def status(service: str) -> dict:
         return {
             "service": service,
-            "has_token": bool(db.get_setting(f"token-{service}")),
+            "has_token": bool(crud.get_setting(f"token-{service}")),
             "playlists": sum(
                 1
-                for playlist in db.list_playlists(service)
+                for playlist in crud.list_playlists(service)
                 if playlist.kind == "imported"
             ),
         }

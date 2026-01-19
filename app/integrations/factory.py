@@ -15,7 +15,6 @@ FULL_NAME = {
     "youtube": "YouTube Music",
 }
 
-# Where a track lives, used for the "open in service" links.
 TRACK_URL = {
     "yandex": "https://music.yandex.ru/track/{id}",
     "youtube": "https://music.youtube.com/watch?v={id}",

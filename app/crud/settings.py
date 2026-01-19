@@ -1,5 +1,5 @@
-from .core import session
-from .models import Setting
+from app.core.db import session
+from app.models import Setting
 
 
 def get_setting(key: str, default: str | None = None) -> str | None:

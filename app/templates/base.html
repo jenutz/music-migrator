@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,7 +18,7 @@
   <aside class="sidebar">
     <h1>
       Music Migrator
-      <small>перенос медиатеки между сервисами</small>
+      <small>move a music library between services</small>
     </h1>
 
     {% for sid in services %}
@@ -28,43 +28,43 @@
         <img class="service-icon" src="{{ url_for('static', path=sid ~ '_icon.svg') }}?v={{ time }}" alt="{{ sid }}">
         <div class="service-name">{{ fullname[sid] }}</div>
         <div class="service-state {% if st.has_token %}ok{% endif %}">
-          <span class="dot"></span>{% if st.has_token %}подключён{% else %}нет токена{% endif %}
+          <span class="dot"></span>{% if st.has_token %}connected{% else %}no token{% endif %}
         </div>
       </div>
 
       <div class="token-box">
         {% if sid == "yandex" %}
         <div class="device-auth">
-          <button class="device-btn" type="button">Войти через Яндекс</button>
+          <button class="device-btn" type="button">Log in with Yandex</button>
           <div class="device-panel" hidden>
             <p class="device-line">
-              Откройте <a class="device-link" href="https://ya.ru/device" target="_blank"
-              rel="noopener">страницу подтверждения</a> и введите код
+              Open the <a class="device-link" href="https://ya.ru/device" target="_blank"
+              rel="noopener">confirmation page</a> and enter the code
               <b class="device-code">…</b>
             </p>
-            <p class="device-status">Ждём подтверждения…</p>
-            <button class="device-cancel secondary" type="button">Отмена</button>
+            <p class="device-status">Waiting for confirmation…</p>
+            <button class="device-cancel secondary" type="button">Cancel</button>
           </div>
         </div>
-        <p class="hint-or">или вставьте токен вручную</p>
+        <p class="hint-or">or paste a token manually</p>
         {% endif %}
-        <textarea placeholder="Вставьте токен / заголовки запроса"></textarea>
+        <textarea placeholder="Paste a token or request headers"></textarea>
         <div class="hint">{{ token_help[sid] | safe }}</div>
         <div class="buttons">
-          <button class="save-token">Сохранить</button>
-          <button class="secondary cancel-token">Отмена</button>
+          <button class="save-token">Save</button>
+          <button class="secondary cancel-token">Cancel</button>
         </div>
       </div>
 
       <div class="buttons">
-        <button class="login-btn">Войти</button>
-        <button class="load-btn" {% if not st.has_token %}disabled{% endif %}>Загрузить</button>
+        <button class="login-btn">Log in</button>
+        <button class="load-btn" {% if not st.has_token %}disabled{% endif %}>Import</button>
         <button class="clear-btn danger" {% if not st.has_token %}disabled{% endif %}
-                title="Удалить все лайки в сервисе">Очистить</button>
+                title="Remove every like in this service">Clear</button>
       </div>
 
       <ul class="playlist-list" data-service="{{ sid }}">
-        <li class="playlist-empty">плейлистов пока нет</li>
+        <li class="playlist-empty">no playlists yet</li>
       </ul>
     </div>
     {% endfor %}

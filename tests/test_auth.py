@@ -1,16 +1,9 @@
-"""Yandex OAuth device flow.
-
-The real flow needs a browser and a reachable api.music.yandex.net, so these
-tests drive the state machine with a stub client that behaves like
-``yandex_music.Client.device_auth``.
-"""
-
 import time
 from types import SimpleNamespace
 
 import yandex_music
 
-from app import db
+from app import crud
 from app.services.auth_service import YandexDeviceAuth
 
 DEVICE_CODE = SimpleNamespace(
@@ -22,8 +15,6 @@ DEVICE_CODE = SimpleNamespace(
 
 
 class StubOAuthClient:
-    """Returns a token (or raises) right after handing out the user code."""
-
     def __init__(self, token=None, error=None):
         self.token = token
         self.error = error
@@ -38,8 +29,6 @@ class StubOAuthClient:
 
 
 class BlockingOAuthClient:
-    """Stays in the flow until the caller cancels, like a real unanswered prompt."""
-
     def __init__(self):
         self.calls = 0
 
@@ -88,10 +77,9 @@ def test_successful_flow_stores_the_access_token():
     assert status["verification_url"] == "https://ya.ru/device"
     assert status["error"] is None
 
-    # The rest of the app only knows about ``token-<service>``.
-    assert db.get_setting("token-yandex") == "yandex-access"
-    assert db.get_setting("yandex-refresh-token") == "yandex-refresh"
-    assert db.get_setting("yandex-token-expires-at")
+    assert crud.get_setting("token-yandex") == "yandex-access"
+    assert crud.get_setting("yandex-refresh-token") == "yandex-refresh"
+    assert crud.get_setting("yandex-token-expires-at")
 
 
 def test_expiry_timestamp_is_roughly_expires_in():
@@ -100,7 +88,7 @@ def test_expiry_timestamp_is_roughly_expires_in():
     manager.start()
     wait_for(manager, "success")
 
-    stored = db.get_setting("yandex-token-expires-at")
+    stored = crud.get_setting("yandex-token-expires-at")
     assert stored and stored.endswith("+00:00")
 
 
@@ -113,8 +101,8 @@ def test_timeout_leaves_no_token_behind():
     manager.start()
     status = wait_for(manager, "error")
 
-    assert "Код устарел" in status["error"]
-    assert db.get_setting("token-yandex") is None
+    assert "code expired" in status["error"]
+    assert crud.get_setting("token-yandex") is None
 
 
 def test_unreachable_network_gets_a_readable_message():
@@ -135,7 +123,7 @@ def test_cancel_stops_the_flow():
 
     manager.cancel()
     assert wait_for(manager, "cancelled")["error"] is None
-    assert db.get_setting("token-yandex") is None
+    assert crud.get_setting("token-yandex") is None
 
 
 def test_second_start_does_not_spawn_another_flow():

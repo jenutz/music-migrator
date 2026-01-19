@@ -5,8 +5,8 @@
 <div class="main-header">
   <h2>{{ src_name }} → {{ dst_name }}</h2>
   <span class="muted">
-    Сопоставление треков ·
-    из плейлиста <span id="src-origin" data-created="{{ src_created_at }}">{{ src_created_at }}</span>
+    Matching tracks ·
+    from the playlist of <span id="src-origin" data-created="{{ src_created_at }}">{{ src_created_at }}</span>
   </span>
 </div>
 
@@ -27,12 +27,12 @@
         <span class="badge" id="track-count">0</span>
       </h3>
       <div class="progress"><span id="progress-bar"></span></div>
-      <p style="margin:0;font-size:.8em;color:#777" id="progress-text">Загрузка…</p>
+      <p style="margin:0;font-size:.8em;color:#777" id="progress-text">Loading…</p>
       <div class="legend">
-        <span><i class="chip chosen"></i>выбрано</span>
-        <span><i class="chip applied"></i>пролайкано</span>
-        <span><i class="chip skipped"></i>пропущено</span>
-        <span><i class="chip"></i>осталось</span>
+        <span><i class="chip chosen"></i>chosen</span>
+        <span><i class="chip applied"></i>delivered</span>
+        <span><i class="chip skipped"></i>skipped</span>
+        <span><i class="chip"></i>left</span>
       </div>
     </header>
     <ul id="track-items" class="track-items"></ul>
@@ -40,15 +40,15 @@
 
   <div class="detail">
     <div id="empty-state" class="panel empty" hidden>
-      В исходном плейлисте нет треков.
+      The source playlist has no tracks.
     </div>
 
     <div id="source-pane" class="panel">
       <div class="pane-head">
-        <h3>Исходный трек <span class="badge" id="track-index"></span></h3>
+        <h3>Source track <span class="badge" id="track-index"></span></h3>
         <div style="display:flex;gap:8px">
-          <button class="btn secondary" id="prev-track" title="Предыдущий">←</button>
-          <button class="btn secondary" id="next-track" title="Следующий">→</button>
+          <button class="btn secondary" id="prev-track" title="Previous">←</button>
+          <button class="btn secondary" id="next-track" title="Next">→</button>
         </div>
       </div>
       <div class="track-card" id="source-card"></div>
@@ -56,28 +56,28 @@
 
     <div class="panel">
       <div class="pane-head">
-        <h3>Варианты в {{ dst_name }}</h3>
+        <h3>Candidates on {{ dst_name }}</h3>
         <form id="search-form">
-          <input id="search-input" type="search" placeholder="Искать иначе…">
-          <button class="btn secondary" type="submit">Искать</button>
+          <input id="search-input" type="search" placeholder="Search differently…">
+          <button class="btn secondary" type="submit">Search</button>
         </form>
       </div>
       <ul class="candidates" id="candidates"></ul>
       <p class="hint">
-        Горячие клавиши: <kbd>1</kbd>–<kbd>9</kbd> выбрать · <kbd>s</kbd> пропустить · <kbd>n</kbd> дальше
+        Shortcuts: <kbd>1</kbd>–<kbd>9</kbd> choose · <kbd>s</kbd> skip · <kbd>n</kbd> next
       </p>
     </div>
 
     <footer class="apply-bar">
       <div class="apply-info">
-        выбрано <strong id="apply-chosen">0</strong> ·
-        {% if delivery == "playlist" %}добавлено{% else %}пролайкано{% endif %}
+        chosen <strong id="apply-chosen">0</strong> ·
+        {% if delivery == "playlist" %}added{% else %}liked{% endif %}
         <strong id="apply-applied">0</strong> ·
-        пропущено <strong id="apply-skipped">0</strong> ·
-        всего <strong id="apply-total">0</strong>
+        skipped <strong id="apply-skipped">0</strong> ·
+        total <strong id="apply-total">0</strong>
       </div>
       <button class="btn" id="apply-btn" disabled>
-        {% if delivery == "playlist" %}Собрать плейлист в {{ dst_name }}{% else %}Лайкнуть выбранные в {{ dst_name }}{% endif %}
+        {% if delivery == "playlist" %}Build a playlist on {{ dst_name }}{% else %}Like the chosen tracks on {{ dst_name }}{% endif %}
       </button>
     </footer>
   </div>

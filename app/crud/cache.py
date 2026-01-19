@@ -2,8 +2,8 @@ import json
 
 from sqlalchemy import delete, select
 
-from .core import now, session
-from .models import SearchCache
+from app.core.db import now, session
+from app.models import SearchCache
 
 
 def get_cached_search(src_track_id: int, dst_service: str) -> list[dict] | None:

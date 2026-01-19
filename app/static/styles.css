@@ -1,4 +1,3 @@
-/* Music Migrator - light theme, sidebar layout (kept close to the original) */
 
 body {
   font-family: 'Segoe UI', sans-serif;
@@ -11,8 +10,6 @@ html, body {
   height: 100%;
   margin: 0;
 }
-
-/* --- sidebar ---------------------------------------------------------- */
 
 .sidebar {
   width: 30%;
@@ -133,7 +130,6 @@ button:disabled {
   color: #666;
 }
 
-/* inline token form, hidden until "Войти" is pressed */
 .token-box {
   display: none;
   flex-direction: column;
@@ -162,8 +158,6 @@ button:disabled {
 }
 
 .token-box .hint a { color: #007bff; }
-
-/* --- main content ----------------------------------------------------- */
 
 #main-content {
   flex: 1;
@@ -208,8 +202,6 @@ button:disabled {
   padding: 20px;
 }
 
-/* --- service chooser -------------------------------------------------- */
-
 .services-row {
   display: flex;
   gap: 24px;
@@ -245,26 +237,18 @@ button:disabled {
 
 .service-pick img { width: 46px; height: 46px; object-fit: contain; }
 
-/* --- library table ---------------------------------------------------- */
-
-/* The table is a panel body, so it borrows the panel's rounded corners:
-   padding moves to the cells and the scroll wrapper clips the corners. */
 .panel.table-panel {
   padding: 0;
   overflow: hidden;
 }
 
 .table-scroll {
-  /* Fills whatever height the panel got, so the table ends where the window
-     ends instead of at a guessed 100vh-minus-something. */
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   border-radius: 12px;
 }
 
-/* The library view is a full-height column: header on top, table taking the
-   rest. Anything shorter left a strip of empty page under the table. */
 #main-content[data-view="library"] {
   display: flex;
   flex-direction: column;
@@ -272,8 +256,6 @@ button:disabled {
 }
 
 #main-content[data-view="library"] .table-panel {
-  /* grow into the leftover height for long libraries, stay hugged to the
-     table for short ones - no empty white block either way */
   flex: 0 1 auto;
   max-height: 100%;
   min-height: 0;
@@ -334,12 +316,9 @@ table.library img.thumb {
   height: 48px;
   border-radius: 7px;
   object-fit: cover;
-  /* keeps the row from jumping while a cover is still loading */
   background: #eef1f3;
   display: block;
 }
-
-/* --- workspace -------------------------------------------------------- */
 
 .workspace {
   display: grid;
@@ -477,7 +456,6 @@ table.library img.thumb {
 
 .candidates li:hover { border-color: #007bff; background: #fff; }
 
-/* suggestion already in the local library: free to pick, no search needed */
 .candidates li.from-db {
   border-color: #cfe6d4;
   background: #f3faf5;
@@ -524,8 +502,6 @@ kbd { background: #e9ecef; border-radius: 4px; padding: 0 4px; font-size: 0.9em;
 
 .empty { color: #888; padding: 30px; text-align: center; }
 
-/* --- toast ------------------------------------------------------------ */
-
 .toast {
   position: fixed;
   bottom: 22px;
@@ -555,22 +531,17 @@ kbd { background: #e9ecef; border-radius: 4px; padding: 0 4px; font-size: 0.9em;
   .candidates { max-height: none; }
 }
 
-/* --- polish ----------------------------------------------------------- */
-
-/* zebra rows keep long libraries readable */
 table.library tbody tr:nth-child(even) { background: #fbfcfd; }
 table.library tbody tr:nth-child(even):hover { background: #f8f9fa; }
 table.library th:first-child,
 table.library td:first-child { width: 42px; color: #999; }
 
-/* the apply bar should stay reachable while scrolling a long library */
 .apply-bar {
   position: sticky;
   bottom: 0;
   z-index: 5;
 }
 
-/* animate the toast + chips instead of popping in */
 .toast { animation: toast-in 0.18s ease-out; }
 
 @keyframes toast-in {
@@ -578,7 +549,6 @@ table.library td:first-child { width: 42px; color: #999; }
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
-/* small "open in service" affordance on tracks and candidates */
 .open-link {
   display: inline-flex;
   align-items: center;
@@ -597,7 +567,6 @@ table.library td:first-child { width: 42px; color: #999; }
 
 .open-link:hover { background: #eef4ff; border-color: #b9d0f2; color: #007bff; }
 
-/* track counter next to the sidebar title */
 .track-list-head h3 {
   display: flex;
   align-items: center;
@@ -605,14 +574,12 @@ table.library td:first-child { width: 42px; color: #999; }
   gap: 8px;
 }
 
-/* thumbs get a soft edge so missing covers are less jarring */
 .track-card img,
 .candidates img,
 table.library img.thumb {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 
-/* empty states shouldn't look like a rendering bug */
 .empty {
   background: #fff;
   border: 1px dashed #d6dadd;
@@ -621,7 +588,6 @@ table.library img.thumb {
   padding: 28px;
 }
 
-/* thin scrollbars inside the scrollable panes */
 .track-items::-webkit-scrollbar,
 .candidates::-webkit-scrollbar { width: 8px; }
 .track-items::-webkit-scrollbar-thumb,
@@ -630,10 +596,7 @@ table.library img.thumb {
   border-radius: 99px;
 }
 
-/* the link sits before the cover, so it must not be pushed to the far right */
 .track-card .open-link { align-self: flex-start; margin-top: 2px; }
-
-/* --- yandex device flow ----------------------------------------------- */
 
 .device-auth {
   display: flex;
@@ -704,14 +667,11 @@ table.library img.thumb {
   text-transform: none;
 }
 
-/* sentinel that triggers loading the next batch of library rows */
 .table-sentinel {
   height: 1px;
 }
 
 .table-sentinel[hidden] { display: none; }
-
-/* --- playlist rows in the sidebar ------------------------------------- */
 
 .playlist-list {
   list-style: none;
@@ -764,7 +724,6 @@ table.library img.thumb {
 
 .playlist-source { color: #aaa; }
 
-/* the snapshot a target playlist was exported from, on its own line */
 .playlist-origin {
   flex-basis: 100%;
   display: flex;
@@ -815,8 +774,6 @@ table.library img.thumb {
 
 .playlist-actions button.danger:hover { color: #c62828; background: #fdecea; }
 
-/* --- playlist table extras -------------------------------------------- */
-
 .table-host { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
 table.library td .sub {
@@ -861,8 +818,6 @@ table.library td.muted-cell { color: #bbb; }
   vertical-align: middle;
   text-transform: uppercase;
 }
-
-/* --- export chooser ---------------------------------------------------- */
 
 .export-panel { max-width: 620px; }
 
@@ -921,7 +876,6 @@ table.library td.muted-cell { color: #bbb; }
 .service-pick small { color: #9aa3ad; font-size: 0.72em; }
 .service-pick small.muted { color: #c3c9d0; }
 
-/* emptying a service's likes is destructive, so it is not a blue button */
 .buttons button.clear-btn {
   background: #fff;
   color: #b3392f;
