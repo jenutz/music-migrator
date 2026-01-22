@@ -1,98 +1,67 @@
 # Music Migrator
 
-Moves a liked-tracks library from one music service to another.
+Move your liked-tracks library between **Yandex Music** and **YouTube Music**, in either direction.
 
-I had this sitting half-finished for about six months, so it got rebuilt on
-SQLite with no user accounts — it is a one-person tool, so pretending it needed
-a users table was just cost. The storage layer is SQLAlchemy 2 with mapped
-classes; the tables are all there is, no service/repository tier on top.
+![Matching a target playlist, track by track](docs/screenshots/playlist.jpg)
 
 ## How it works
 
-Playlists are the unit of work, not services. A service row only logs in and
-imports; everything you review and apply happens inside a playlist.
+1. **Connect a service.**
+   - *Yandex Music:* press **Log in with Yandex** and confirm the code on the Yandex page.
+   - *YouTube Music:* copy the request headers from the YouTube Music website and paste them into the app (see [Tokens](#tokens)).
+2. **Import.** Takes a snapshot of the service's liked tracks and stores it in the app. Snapshots are listed in the sidebar under their service, labelled with the import date.
+3. **Export.** Creates a *target* from a source playlist. Choose where the tracks should land: a **new playlist** on the destination service, or its **liked tracks**.
 
-1. Connect a service — for Yandex press **Log in with Yandex** and confirm the
-   code on the Yandex page; YouTube still takes a pasted header block.
-2. **Import** snapshots that service's liked tracks into a new playlist,
-   listed in the sidebar under the service with the date it was imported.
-   Importing again creates another playlist instead of overwriting the old one.
-3. **Export** on a playlist creates a *target* playlist. Pick where the tracks
-   should land — a **new playlist** on the destination service, or **into the
-   likes** — and which service, including the same one. Several targets can
-   exist for the same source, each with its own choices.
-4. In the target playlist: one source track at a time, searched on the other
-   service by `title + artist` and ranked by a fuzzy score (title, artist,
-   duration, and a small penalty for music videos). Pick one or skip; choices
-   are saved immediately.
-5. Hit the apply button. It sends the chosen tracks in source-playlist order,
-   50 at a time, and is safe to re-run — applied tracks are marked so they are
-   not sent twice. A playlist target creates the remote playlist on the first
-   batch and appends to it afterwards. The sidebar row shows the progress.
+   ![Choosing where an export should land](docs/screenshots/export.jpg)
 
-Each service row also has **Clear**, which empties that service's liked
-library. It asks you to type the service name, and it never touches the
-snapshots already imported here.
+4. **Match.** Each source track is searched on the other service by `title + artist` and candidates are ranked by a fuzzy score based on title, artist and duration, with a small penalty for music videos. Pick a candidate or skip it. Choices are saved immediately.
+5. **Apply.** Chosen tracks are sent in source-playlist order, 50 at a time.
+   - Safe to re-run: applied tracks are marked and never sent twice.
+   - For a playlist target, the remote playlist is created with the first batch and appended to afterwards.
+   - Progress is shown on the sidebar row.
 
-Deleting a playlist cascades: dropping an import also drops the targets made
-from it, while deleting a target leaves the source alone.
+### Clearing
 
-## Running it
+**Clear** (on each service row) empties that service's liked library. You must type the service name to confirm. It never touches snapshots already imported into the app.
+
+## Running
+
+**With Docker**
 
 ```sh
 docker compose up --build
-# http://localhost:8000
+# open http://localhost:8000
 ```
 
-Locally without Docker:
+**Without Docker**
 
 ```sh
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
 
-Data lives in `data/app.db` (or `$DATA_DIR/app.db`). Compose bind-mounts
-`./data`, so the database is a normal file you own - open it with any sqlite
-client, copy it, and it survives `docker compose down -v`.
+### Data storage
 
-## Layout
-
-```
-app/            the application
-  main.py       routes, payloads, error translation
-  db/           SQLAlchemy models + a module of queries per subject
-    models.py   the six mapped classes
-    core.py     engine, sessions, init
-    playlists.py, matches.py, tracks.py, cache.py, settings.py
-  integrations/ one module per music service (+ the shared interface)
-  services/     import, export, matching, applying, auth, library clearing
-  templates/    jinja pages
-  static/       css, js, icons
-tests/          pytest, all offline
-data/           app.db + its WAL files (gitignored)
-junk/           obsolete local junk: old secrets, scratch scripts (gitignored)
-```
-
-Anything that is not part of the app goes into `junk/`, which is ignored as one
-folder instead of a rule per artefact. It is safe to delete wholesale.
+Everything is stored in a single SQLite file at `data/app.db` (or `$DATA_DIR/app.db`). Compose bind-mounts `./data`, so the database is a normal file you own: open it with any SQLite client or copy it. It survives `docker compose down -v`.
 
 ## Tokens
 
-**Yandex Music** — press **Log in with Yandex** in the sidebar: the app asks
-Yandex for a device code, shows it, and waits for you to confirm it on
-https://ya.ru/device. The token is saved to the local database. A manually
-pasted token still works as a fallback
-(https://yandex-music.readthedocs.io/en/main/token.html).
+### Yandex Music
 
-**YouTube Music** — open https://music.youtube.com, F12 → Network, find a
-`/browse` request, copy the whole request header block and paste it in.
-Details: https://ytmusicapi.readthedocs.io/en/stable/setup/browser.html
+Press **Log in with Yandex** in the sidebar. The app requests a device code from Yandex, displays it, and waits while you confirm it at <https://ya.ru/device>. The token is then saved to the local database.
 
-Neither token is written to the repo; tokens live in `data/app.db`, which is
-gitignored.
-The device flow also stores `refresh_token` and the expiry timestamp, but the
-`yandex-music` library does not refresh tokens on its own — when the token
-expires, run the login again.
+Pasting a token manually still works as a fallback ([how to get one](https://yandex-music.readthedocs.io/en/main/token.html)).
+
+### YouTube Music
+
+1. Open <https://music.youtube.com> and press **F12** → **Network**.
+2. Find a `/browse` request.
+3. Copy the whole request header block and paste it into the app.
+
+See the [ytmusicapi setup guide](https://ytmusicapi.readthedocs.io/en/stable/setup/browser.html) for details.
+
+> [!NOTE]
+> Tokens are never shared. They stay on your machine, stored in `data/app.db`.
 
 ## Tests
 
@@ -100,23 +69,11 @@ expires, run the login again.
 pytest tests -q
 ```
 
-The HTTP tests stub out the service clients, so they run offline. They cover
-the scoring rules, local-first matching, playlist ordering, per-playlist
-scoping of choices, the chosen → applied transition, both delivery modes
-(playlist vs likes), clearing a service's likes, and that re-running apply does
-not double-like anything.
+## Credits
 
-## Known rough edges
+Neither service publishes a public music API for this, so the app relies on two unofficial Python clients built by reverse-engineering the web clients:
 
-- YouTube's header token expires eventually; if import starts 401-ing, paste a
-  fresh one.
-- There is no rename: playlists are identified by their import/export time.
-- A target playlist holds matches, not copies, so it only lists tracks that
-  were chosen in it.
-- Search results are cached per track, so re-searching after editing the query
-  is explicit (`Search` button / `refresh=true`) rather than automatic.
-- No Alembic: the app has one database, so schema changes so far were applied
-  by hand and `init_db()` only backfills data. Adding a column means doing it
-  twice — in `models.py` and in the existing file.
-- Duration heuristics assume the two services agree on track length — live and
-  extended versions need a manual pick.
+- **[yandex-music](https://github.com/MarshalX/yandex-music-api)** by MarshalX: the Yandex Music client, including the device-code login flow.
+- **[ytmusicapi](https://github.com/sigma67/ytmusicapi)** by sigma67: the YouTube Music client, which is where the pasted-header-block token comes from.
+
+Thanks to both maintainers.
